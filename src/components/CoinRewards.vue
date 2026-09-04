@@ -1,0 +1,80 @@
+<script setup>
+import GameIcon from './GameIcon.vue'
+import coinIcon from '../assets/coin-icon.png'
+import title from '../assets/ui/reward-exchange/title.png'
+import rowActive from '../assets/ui/reward-exchange/row-active.png'
+import rowDisabled from '../assets/ui/reward-exchange/row-disabled.png'
+import btnHome from '../assets/ui/common/btn-home-blue.png'
+
+const props = defineProps({
+  coins: { type: Number, required: true },
+  catalog: { type: Array, required: true },
+})
+
+const emit = defineEmits(['back', 'redeem'])
+</script>
+
+<template>
+  <section class="screen scene rewards-screen">
+    <img class="scene-title" :src="title" alt="แลกรางวัล" />
+
+    <p class="rule-note">
+      Coin คงเหลือ
+      <img class="coin-inline" :src="coinIcon" alt="" />
+      <strong>{{ coins.toLocaleString() }}</strong>
+    </p>
+
+    <ul class="reward-list">
+      <li v-for="item in catalog" :key="item.id">
+        <button
+          class="reward-row"
+          :class="{ disabled: coins < item.cost }"
+          :disabled="coins < item.cost"
+          @click="emit('redeem', item)"
+        >
+          <img class="row-bg" :src="coins < item.cost ? rowDisabled : rowActive" alt="" />
+          <span class="row-thumb"><img :src="item.image" :alt="item.label" /></span>
+          <span class="row-text">
+            <span class="row-label">{{ item.label }}</span>
+            <span class="row-cost"><img class="coin-inline" :src="coinIcon" alt="" />{{ item.cost.toLocaleString() }}</span>
+          </span>
+        </button>
+      </li>
+    </ul>
+
+    <button class="img-btn back-btn" @click="emit('back')"><img :src="btnHome" alt="กลับหน้าหลัก" /></button>
+  </section>
+</template>
+
+<style scoped>
+.rewards-screen { align-items: stretch; justify-content: flex-start; }
+.rule-note {
+  margin: 4px 0 16px; color: #bcdcfa; font-size: 12.5px; text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.rule-note strong { color: #ffd739; font-size: 14px; }
+.coin-inline { width: 15px; height: 15px; object-fit: contain; }
+
+.reward-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.reward-row {
+  position: relative; width: 100%; padding: 0; border: 0; background: transparent; cursor: pointer;
+  display: block; -webkit-tap-highlight-color: transparent;
+}
+.reward-row:active:not(.disabled) { transform: scale(.98); }
+.reward-row.disabled { cursor: not-allowed; }
+.row-bg { width: 100%; height: auto; display: block; }
+.row-thumb {
+  position: absolute; left: 4%; top: 50%; width: 15%; aspect-ratio: 1;
+  transform: translateY(-50%);
+  display: grid; place-items: center;
+}
+.row-thumb img { width: 82%; height: 82%; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0,0,0,.35)); }
+.row-text {
+  position: absolute; left: 22%; top: 50%; width: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left;
+}
+.row-label { font-size: clamp(11px, 3.4vw, 13.5px); font-weight: 700; color: #eaf6ff; line-height: 1.2; }
+.row-cost { font-size: clamp(10px, 3vw, 12px); font-weight: 800; color: #ffd739; display: flex; align-items: center; gap: 4px; }
+
+.back-btn { width: min(300px, 80vw); margin-top: auto; }
+</style>

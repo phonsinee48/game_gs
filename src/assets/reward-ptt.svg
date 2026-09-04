@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200" fill="none">
+  <defs>
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2eb2ff"/><stop offset="100%" stop-color="#0a58d8"/></linearGradient></defs>
+  <rect x="14" y="18" width="292" height="164" rx="16" fill="url(#p1)"/>
+  <rect x="14" y="18" width="292" height="164" rx="16" stroke="#d6f2ff" stroke-width="4"/>
+  <path d="M77 102C77 72 101 52 131 52C160 52 183 72 183 102C183 132 160 154 131 154C101 154 77 132 77 102Z" fill="#eaf6ff" opacity="0.95"/>
+  <path d="M100 73C110 56 127 48 146 51C131 65 125 84 125 102H95C95 92 97 82 100 73Z" fill="#ff4f3e"/>
+  <path d="M125 102C125 85 131 66 146 51C162 53 176 61 186 74C182 92 168 102 150 102H125Z" fill="#0a6cff"/>
+  <text x="228" y="100" text-anchor="middle" font-size="34" font-weight="900" font-family="Arial" fill="#ffffff">PTT</text>
+  <text x="228" y="133" text-anchor="middle" font-size="24" font-weight="700" font-family="Arial" fill="#eaf6ff">Gift Card</text>
+</svg>

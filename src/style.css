@@ -1,0 +1,173 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #fff;
+  background: #020813;
+}
+* { box-sizing: border-box; }
+html, body, #app { margin: 0; min-width: 320px; min-height: 100%; }
+button { font: inherit; -webkit-tap-highlight-color: transparent; }
+button:disabled { opacity: .45; }
+
+.app-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: stretch;
+  background: #01040c;
+}
+
+.game-phone {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  overflow: hidden;
+  background: #051033 linear-gradient(180deg, #08163f 0%, #030a1e 60%, #01040c 100%);
+  background-size: cover;
+}
+.game-phone.flash::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:30;
+  background:#c9f1ff;
+  animation: flash .26s ease both;
+}
+
+/* Persistent top HUD: brand badge + Points/Coin/speaker top-bar art,
+   matching the real asset kit's top bar across every screen. The topbar
+   art is a label-only template (no baked numbers), so the live Points/
+   Coin values are overlaid as real text at coordinates measured from the
+   source asset (see topbar.png: pill1 x 3.68%-39.6%, pill2 x 41.44%-77.36%,
+   speaker x 79.19%-96.69%, all within a 2172x724 canvas). */
+.hud {
+  padding: 20px 14px 5px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  position:relative;
+  z-index:15;
+}
+.gs-badge {
+  width:30%; max-width:95px; height:auto; object-fit:contain; flex-shrink:0;
+  filter:drop-shadow(0 0 10px rgba(49,167,255,.5));
+}
+.hud-topbar { position:relative; flex:1; min-width:0; line-height:0; }
+.hud-topbar-bg { width:100%; height:auto; display:block; }
+.hud-num {
+  position:absolute; top:47%; height:23%;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:900; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6);
+  font-size: clamp(9px, 3vw, 16px);
+  font-variant-numeric: tabular-nums;
+  pointer-events:none;
+}
+.hud-num-points { left:3.68%; width:35.92%; }
+.hud-num-coin { left:41.44%; width:35.92%; }
+.hud-speaker-hit {
+  position:absolute; left:79.19%; top:2%; width:17.5%; height:96%;
+  background:transparent; border:0; cursor:pointer; border-radius:10px;
+}
+.hud-speaker-hit.muted { background: rgba(3,10,25,.55); }
+
+.screen {
+  min-height:calc(100dvh - 68px);
+  padding:22px 18px 28px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  position:relative;
+}
+
+/* Shared "scene" shell used by the mostly-static screens (limit-reached,
+   how-to-play, claw-success, egg-open, receive-prize, reward-exchange,
+   play-history): centered title art + content + an image button at the
+   bottom, all over the app-wide hex backdrop. */
+.scene { justify-content:flex-start; text-align:center; }
+.scene-title { width:min(380px, 88vw); height:auto; margin:2px 0 14px; filter:drop-shadow(0 6px 14px rgba(0,0,0,.45)); }
+.scene-note { width:min(340px, 84vw); height:auto; margin:6px auto 4px; opacity:.9; }
+
+/* Chrome-text heading for screens with no illustrated title art of their
+   own (ticket exchange, batch picker, batch summary) — echoes the metallic
+   silver + neon-glow look of the real title art elsewhere in the app. */
+.brand-heading {
+  margin: 4px 0 6px;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: .3px;
+  text-align: center;
+  background: linear-gradient(180deg, #ffffff 0%, #cfe3f7 45%, #86b7e6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 10px rgba(60, 190, 255, .55)) drop-shadow(0 2px 0 rgba(10, 40, 80, .5));
+}
+
+/* Sci-fi HUD panel with notched corners, used by screens without their
+   own illustrated card art. */
+.hud-panel {
+  width: 100%;
+  padding: 24px 20px 26px;
+  background: linear-gradient(180deg, rgba(20, 60, 110, 0.45), rgba(6, 20, 42, 0.68));
+  border: 1px solid rgba(101, 197, 255, 0.4);
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+  box-shadow:
+    inset 0 0 30px rgba(40, 150, 255, 0.1),
+    0 0 0 1px rgba(56, 143, 208, .35),
+    0 12px 30px rgba(0, 0, 0, .3);
+  display: flex; flex-direction: column; align-items: center;
+  position: relative;
+}
+.hud-panel::before {
+  content: "";
+  position: absolute; left: 18px; right: 18px; top: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #ffd739, #7fd0ff, transparent);
+  opacity: .85;
+}
+
+.img-btn {
+  border:0; background:transparent; padding:0; cursor:pointer; display:block;
+  -webkit-tap-highlight-color:transparent;
+}
+.img-btn img {
+  width:100%; height:auto; display:block;
+  filter:drop-shadow(0 8px 16px rgba(0,0,0,.35));
+  transition:transform .14s ease, filter .14s ease;
+}
+.img-btn:active:not(:disabled) img { transform:scale(.96); }
+.img-btn:disabled { cursor:not-allowed; }
+.img-btn:disabled img { filter:grayscale(.5) brightness(.7); }
+
+.home-screen { justify-content:flex-start; padding-top:10px; }
+.home-title { width:min(420px, 92vw); height:auto; margin:0 0 6px; filter:drop-shadow(0 6px 18px rgba(0,0,0,.45)); }
+.home-cabinet { width:min(400px, 88vw); height:auto; filter:drop-shadow(0 16px 24px rgba(0,0,0,.4)); }
+.home-start-btn { width:min(360px, 88vw); margin-top:-56px; margin-bottom:16px; position:relative; z-index:2; }
+.home-nav-row { width:100%; max-width:420px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.home-footer-note { margin-top:auto; padding-top:14px; color:#7fa1c2; font-size:11px; text-align:center; }
+
+.cta {
+  width:82%;
+  min-height:58px;
+  border:0;
+  border-radius:18px;
+  color:#10213e;
+  cursor:pointer;
+  background:linear-gradient(180deg,#ffd739,#f5a400);
+  box-shadow:0 8px 0 #9a6000, 0 14px 28px rgba(255,169,0,.22), inset 0 2px 0 rgba(255,255,255,.7);
+  transition:transform .14s ease, filter .14s ease;
+}
+.cta:active { transform:translateY(4px); box-shadow:0 4px 0 #9a6000, 0 8px 20px rgba(255,169,0,.18); }
+.cta strong { display:block; font-size:19px; }
+.cta small { display:block; font-size:11px; margin-top:2px; }
+.cta.compact { width:70%; }
+.message { min-height: 20px; margin: 12px 0 0; color: #b9dcf6; text-align: center; font-size: 12px; }
+
+.screen-enter-active, .screen-leave-active { transition:opacity .24s ease, transform .24s ease; }
+.screen-enter-from { opacity:0; transform:translateY(10px) scale(.99); }
+.screen-leave-to { opacity:0; transform:translateY(-8px) scale(.99); }
+
+@keyframes flash { 0%{opacity:0} 45%{opacity:.9} 100%{opacity:0} }
+
+@media (max-width:480px) {
+  .screen { min-height:calc(100dvh - 68px); }
+}
