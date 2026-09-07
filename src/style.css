@@ -34,6 +34,25 @@ button:disabled { opacity: .45; }
   animation: flash .26s ease both;
 }
 
+.preloader {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  background: #01040c radial-gradient(circle at 50% 40%, #08163f 0%, #01040c 75%);
+}
+.preloader-spinner {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  border: 4px solid rgba(101, 197, 255, .2);
+  border-top-color: #65c5ff;
+  box-shadow: 0 0 18px rgba(60, 190, 255, .35);
+  animation: preloaderSpin .8s linear infinite;
+}
+.preloader-label { margin: 0; color: #9fd3ff; font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+.preloader-fade-leave-active { transition: opacity .35s ease; }
+.preloader-fade-leave-to { opacity: 0; }
+
+@keyframes preloaderSpin { to { transform: rotate(360deg); } }
+
 /* Persistent top HUD: brand badge + Points/Coin/speaker top-bar art,
    matching the real asset kit's top bar across every screen. The topbar
    art is a label-only template (no baked numbers), so the live Points/

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import eggBlue from './assets/egg-blue.png'
 import eggWhite from './assets/egg-white.png'
@@ -450,6 +450,29 @@ function beep(freq = 320, duration = .05) {
 
 function stopTimer() { clearInterval(timerId) }
 
+// Home-screen art loads as a handful of large PNGs; show a spinner until
+// they're actually ready instead of letting the page pop in piece by piece.
+const appReady = ref(false)
+const homeScreenImages = [
+  gsBatteryBadge, hudTopbar, hexBg, homeTitleFull, cabinetHero,
+  btnStart, navHowToPlay, navHistory, navRewards, coinNoteBanner,
+]
+
+function preloadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = resolve
+    img.onerror = resolve
+    img.src = src
+  })
+}
+
+onMounted(() => {
+  Promise.all(homeScreenImages.map(preloadImage)).then(() => {
+    appReady.value = true
+  })
+})
+
 onBeforeUnmount(() => {
   transitionToken++
   stopTimer()
@@ -460,6 +483,13 @@ onBeforeUnmount(() => {
 <template>
   <main class="app-shell">
     <section class="game-phone" :class="{ flash: sceneFlash }" :style="{ backgroundImage: `url(${hexBg})` }">
+      <transition name="preloader-fade">
+        <div v-if="!appReady" class="preloader">
+          <span class="preloader-spinner"></span>
+          <p class="preloader-label">กำลังโหลด...</p>
+        </div>
+      </transition>
+
       <header class="hud">
         <img class="gs-badge" :src="gsBatteryBadge" alt="GS Battery" />
         <div class="hud-topbar">
