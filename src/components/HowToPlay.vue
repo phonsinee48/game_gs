@@ -6,7 +6,6 @@ import step3 from '../assets/ui/how-to-play/step3.png'
 import step4 from '../assets/ui/how-to-play/step4.png'
 import note from '../assets/ui/how-to-play/note.png'
 import btnConfirm from '../assets/ui/how-to-play/btn-confirm.png'
-import btnHome from '../assets/ui/common/btn-home-blue.png'
 
 defineEmits(['close'])
 </script>
@@ -26,14 +25,13 @@ defineEmits(['close'])
 
     <div class="how-to-play-actions">
       <button class="img-btn" @click="$emit('close')"><img :src="btnConfirm" alt="เข้าใจแล้ว" /></button>
-      <button class="img-btn" @click="$emit('close')"><img :src="btnHome" alt="กลับหน้าหลัก" /></button>
     </div>
   </section>
 </template>
 
 <style scoped>
 .how-to-play-screen { justify-content: flex-start; }
-.steps { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.steps { width: 100%; display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
 .steps img { width: 100%; height: auto; display: block; }
-.how-to-play-actions { width: min(320px, 84vw); display: flex; flex-direction: column; gap: 12px; margin-top: auto; }
+.how-to-play-actions {  display: flex; flex-direction: column; gap: 12px; margin-top: 15px; }
 </style>
