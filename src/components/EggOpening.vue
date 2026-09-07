@@ -16,7 +16,10 @@ const props = defineProps({
 defineEmits(['tap'])
 
 const glow = computed(() => 0.3 + (Math.min(props.crackCount, props.frames) / props.frames) * 0.95)
-const at = (n) => props.crackCount >= n
+// The crack artwork always has 7 progressive stages; scale them against
+// however many taps (frames) this round actually requires, so the egg
+// still reaches "fully cracked" exactly on the last tap regardless of FRAMES.
+const at = (stage) => props.crackCount / props.frames >= stage / 7
 </script>
 
 <template>
@@ -62,7 +65,6 @@ const at = (n) => props.crackCount >= n
 </template>
 
 <style scoped>
-.crack-screen { justify-content: center; text-align: center; }
 .crack-title { width: min(340px, 82vw); margin: 0 0 2px; }
 .crack-subtitle { width: min(260px, 66vw); height: auto; margin: 0 0 20px; }
 
