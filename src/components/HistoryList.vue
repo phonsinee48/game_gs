@@ -11,10 +11,15 @@ defineProps({
 
 defineEmits(['back'])
 
-function formatTime(ts) {
+function formatDate(ts) {
   const d = new Date(ts)
   const pad = (n) => String(n).padStart(2, '0')
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
+}
+function formatClock(ts) {
+  const d = new Date(ts)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 </script>
 
@@ -30,18 +35,19 @@ function formatTime(ts) {
     <ul v-else class="history-list">
       <li v-for="e in entries" :key="e.id" class="history-row">
         <img class="row-bg" :src="rowBg" alt="" />
-        <span class="row-content">
-          <span class="row-main">
-            <span class="history-label">{{ e.label }}</span>
-            <small class="history-time">{{ formatTime(e.ts) }}</small>
-          </span>
-          <span class="history-value" :class="{ coin: e.coinValue }">
-            <template v-if="e.coinValue">
-              <img class="coin-inline" :src="coinIcon" alt="" />
-              {{ e.kind === 'redeem' ? '-' : '+' }}{{ e.coinValue.toLocaleString() }}
-            </template>
-            <template v-else>รางวัล</template>
-          </span>
+        <span class="history-date">{{ formatDate(e.ts) }}</span>
+        <span class="history-clock">{{ formatClock(e.ts) }}</span>
+        <span class="history-value" :class="{ coin: e.coinValue }">
+          <template v-if="e.coinValue">
+            <img class="coin-inline" :src="coinIcon" alt="" />
+            <span>
+              <span class="value-prefix" v-if="e.kind !== 'redeem'">ได้ </span><template v-else>-</template><span class="value-num">{{ e.coinValue.toLocaleString() }}</span> Coin
+            </span>
+          </template>
+          <template v-else>
+            <img class="coin-inline" :src="coinIcon" alt="" />
+            <span>{{ e.label }}</span>
+          </template>
         </span>
       </li>
     </ul>
@@ -60,19 +66,39 @@ function formatTime(ts) {
 .empty-state .g-icon { width: 40px; height: 40px; opacity: 0.6; }
 .empty-state p { margin: 0; font-size: 13px; }
 
-.history-list { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.history-list { list-style: none;  padding: 0; display: flex; flex-direction: column; }
 .history-row { position: relative; width: 100%; }
 .row-bg { width: 100%; height: auto; display: block; }
-.row-content {
-  position: absolute; left: 20%; top: 0; right: 6%; height: 100%;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-}
-.row-main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; min-width: 0; }
-.history-label { font-size: clamp(11px, 3.2vw, 13px); color: #eaf6ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; }
-.history-time { color: #7fa1c2; font-size: 10.5px; }
-.history-value { font-size: clamp(11px, 3.2vw, 13px); font-weight: 800; color: #7fd0ff; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.history-value.coin { color: #ffd739; }
-.coin-inline { width: 13px; height: 13px; object-fit: contain; }
 
-.back-btn { width: min(300px, 80vw); margin-top: auto; }
+/* row.png (1334x344) has a calendar icon at ~31% height and a clock icon
+   at ~63% height, both on the left edge, plus a vertical divider at ~49%
+   width splitting the row into a date/time half and a reward-info half. */
+.history-date {
+  position: absolute; left: 17%; width: 32%; top: 26%; height: 22%;
+  display: flex; align-items: center;
+  font-size: 17px; color: #eaf6ff; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.history-clock {
+  position: absolute; left: 17%; width: 32%; top: 55%; height: 22%;
+  display: flex; align-items: center;
+  font-size: 17px; color: #9fc3e6;  font-weight: 650;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.history-value {
+  position: absolute; left: 52%; width: 44%; top: 0; height: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: clamp(10px, 3vw, 13px); font-weight: 800; color: #7fd0ff;
+}
+.history-value.coin { color: #ffd739; }
+.value-prefix { color: #fff; }
+.value-num { font-size: 1.4em; }
+.coin-inline { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; }
+
+.back-btn { width: min(300px, 80vw); margin-top: auto; align-self: center; }
+.scene-title {
+    width: min(380px, 88vw);
+    height: auto;
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .45)); }
+      
 </style>
