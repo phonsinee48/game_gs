@@ -151,10 +151,19 @@ function confirmExchange(amount) {
   message.value = bonus
     ? `แลกสำเร็จ! ได้รับ ${total} สิทธิ์ (รวมโบนัส +${bonus})`
     : `แลกสำเร็จ! ได้รับ ${total} สิทธิ์`
-  gameState.value = 'idle'
+  gameState.value = 'exchangeSuccess'
+}
+
+function exchangeMore() {
+  gameState.value = 'exchange'
 }
 
 function openBatchPick() {
+  if (devMode) {
+    batchSize.value = 1
+    startRound()
+    return
+  }
   if (canPlayBatch.value) {
     gameState.value = 'batchPick'
   } else if (canExchange.value) {
@@ -533,6 +542,16 @@ onBeforeUnmount(() => {
           :points="points"
           @back="goHome"
           @confirm="confirmExchange"
+        />
+
+        <RedeemSuccess
+          v-else-if="gameState === 'exchangeSuccess'"
+          key="exchangeSuccess"
+          :tickets="tickets"
+          :points="points"
+          @start="openBatchPick"
+          @exchange-more="exchangeMore"
+          @go-home="goHome"
         />
 
         <BatchPicker
