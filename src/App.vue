@@ -17,12 +17,13 @@ import btnStart from './assets/ui/home/btn-start.png'
 import navHowToPlay from './assets/ui/home/nav-how-to-play.png'
 import navHistory from './assets/ui/home/nav-history.png'
 import navRewards from './assets/ui/home/nav-rewards.png'
+import coinNoteBanner from './assets/ui/how-to-play/note.png'
 
 import GameMachine from './components/GameMachine.vue'
-import ClawSuccess from './components/ClawSuccess.vue'
 import EggOpening from './components/EggOpening.vue'
 import RewardResult from './components/RewardResult.vue'
 import TicketExchange from './components/TicketExchange.vue'
+import RedeemSuccess from './components/RedeemSuccess.vue'
 import BatchPicker from './components/BatchPicker.vue'
 import CoinRewards from './components/CoinRewards.vue'
 import HistoryList from './components/HistoryList.vue'
@@ -291,7 +292,6 @@ async function grabEgg(auto = false) {
   await delay(200)
   if (token !== transitionToken) return
 
-  gameState.value = 'clawSuccess'
   clawAnim.value = 'ascend'
   await delay(500)
   if (token !== transitionToken) return
@@ -300,17 +300,11 @@ async function grabEgg(auto = false) {
   await delay(160)
   if (token !== transitionToken) return
 
-  // Give the player a beat to see the claw-success screen (and a chance to
-  // tap through it early) before auto-continuing to the egg-crack screen.
-  setTimeout(() => {
-    if (token !== transitionToken) return
-    proceedToOpening()
-  }, 1800)
+  proceedToOpening(token)
 }
 
-async function proceedToOpening() {
-  if (gameState.value !== 'clawSuccess') return
-  const token = transitionToken
+async function proceedToOpening(token) {
+  if (token !== transitionToken) return
   sceneFlash.value = true
   await delay(240)
   if (token !== transitionToken) return
@@ -589,12 +583,6 @@ onBeforeUnmount(() => {
           @move-end="drive.release"
           @grab="grabEgg(false)"
           @stir="stirEggs"
-        />
-
-        <ClawSuccess
-          v-else-if="gameState === 'clawSuccess'"
-          key="clawSuccess"
-          @continue="proceedToOpening"
         />
 
         <EggOpening
