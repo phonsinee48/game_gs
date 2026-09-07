@@ -324,7 +324,7 @@ async function proceedToOpening(token) {
   crackCount.value = 0
   message.value = batchSize.value > 1
     ? `แตะที่ไข่เพื่อเปิดพร้อมกันทั้งหมด ${batchSize.value} ฟอง`
-    : 'แตะที่ไข่ย้ำ ๆ ให้แตกครบ 8 ครั้ง'
+    : `แตะที่ไข่ย้ำ ๆ ให้แตกครบ ${FRAMES} ครั้ง`
 }
 
 async function tapEgg() {
@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
             <button class="img-btn" @click="gameState = 'history'"><img :src="navHistory" alt="ประวัติการเล่น" /></button>
             <button class="img-btn" @click="gameState = 'rewards'"><img :src="navRewards" alt="แลกรางวัล" /></button>
           </div>
-          <p class="home-footer-note">Coin ไม่มีวันหมดอายุ</p>
+          <img class="home-footer-note" :src="coinNoteBanner" alt="Coin ไม่มีวันหมดอายุ" />
           <p v-if="message" class="message">{{ message }}</p>
         </section>
 
