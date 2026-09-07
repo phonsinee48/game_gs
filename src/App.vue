@@ -34,10 +34,14 @@ import { useClawDrive } from './composables/useClawDrive'
 const EXCHANGE_RATE = 10 // points per ticket
 const EXCHANGE_MAX = 100 // max points per exchange, grants +1 bonus ticket
 const ROUND_TIME = 30 // matches the timer shown in the 08_gameplay / 06_claw_success mockups
-const FRAMES = 8
+const FRAMES = 4
 
-// gameState: idle | exchange | batchPick | howToPlay | playing | stirring
-//          | grabbing | clawSuccess | opening | result | summary | rewards | history
+// gameState: idle | exchange | exchangeSuccess | batchPick | howToPlay | playing
+//          | stirring | grabbing | opening | result | summary | rewards | history
+// ?dev=1 skips ticket/point cost and the round timer so the claw screen
+// can be reached repeatedly while iterating on its UI.
+const devMode = new URLSearchParams(window.location.search).get('dev') === '1'
+
 const gameState = ref('idle')
 const points = ref(120)
 const coins = ref(1250)
@@ -215,13 +219,13 @@ function redeemCoinReward(item) {
 }
 
 function startRound() {
-  if (tickets.value < 1) {
+  if (!devMode && tickets.value < 1) {
     goHome()
     return
   }
   stopTimer()
   transitionToken++
-  tickets.value--
+  if (!devMode) tickets.value--
   batchIndex.value++
   eggs.value = makeEggs()
   drive.setX(50)
@@ -236,6 +240,7 @@ function startRound() {
   message.value = batchSize.value > 1
     ? `รอบ ${batchIndex.value}/${batchSize.value} — เขย่ามือถือเพื่อกวนไข่ แล้วเลื่อนคีมไปตำแหน่งที่ต้องการ`
     : 'เขย่ามือถือเพื่อกวนไข่ แล้วเลื่อนคีมไปตำแหน่งที่ต้องการ'
+  if (devMode) return
   timerId = setInterval(() => {
     timer.value--
     if (timer.value <= 0) {
@@ -387,7 +392,7 @@ function drawReward() {
 }
 
 function playAgain() {
-  if (!canPlayBatch.value) { goHome(); return }
+  if (!devMode && !canPlayBatch.value) { goHome(); return }
   batchSize.value = 1
   batchIndex.value = 0
   batchRewards.value = []
