@@ -54,8 +54,10 @@ const at = (stage) => props.crackCount / props.frames >= stage / 7
         </g>
       </svg>
 
+      <span v-if="justCompleted" class="shockwave" aria-hidden="true"></span>
+      <span v-if="justCompleted" class="shockwave shockwave-delay" aria-hidden="true"></span>
       <span v-if="justCompleted" class="burst" aria-hidden="true">
-        <i v-for="n in 10" :key="n" :style="{ '--n': n }"></i>
+        <i v-for="n in 14" :key="n" :class="{ gold: n % 3 === 0 }" :style="{ '--n': n }"></i>
       </span>
     </button>
 
@@ -70,6 +72,7 @@ const at = (stage) => props.crackCount / props.frames >= stage / 7
 
 .egg-tap {
   position: relative; width: min(240px, 62vw); aspect-ratio: 200 / 168; padding: 0; border: 0; background: transparent; cursor: pointer;
+  touch-action: manipulation;
 }
 .egg-glow {
   position: absolute; inset: -18%; z-index: 0;
@@ -85,7 +88,7 @@ const at = (stage) => props.crackCount / props.frames >= stage / 7
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 .egg-tap.complete .egg-photo {
-  animation: finalFlash 0.42s ease both;
+  animation: finalFlash 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .tap-hint {
   position: absolute; z-index: 2; left: 50%; top: 34%; width: 34%; height: auto;
@@ -104,15 +107,26 @@ const at = (stage) => props.crackCount / props.frames >= stage / 7
   100% { transform: scale(1) rotate(0deg); }
 }
 @keyframes finalFlash {
-  0% { filter: drop-shadow(0 10px 20px rgba(0,0,0,.4)) brightness(1); transform: scale(1); }
-  45% { filter: drop-shadow(0 0 40px rgba(255, 244, 190, 0.95)) brightness(1.6); transform: scale(1.14); }
-  100% { filter: drop-shadow(0 0 20px rgba(255, 244, 190, 0.5)) brightness(1.1); opacity: 0; transform: scale(1.22); }
+  0% { filter: drop-shadow(0 10px 20px rgba(0,0,0,.4)) brightness(1); transform: scale(1) rotate(0deg); }
+  30% { filter: drop-shadow(0 0 50px rgba(255, 244, 190, 1)) brightness(1.85); transform: scale(1.2) rotate(-4deg); }
+  55% { filter: drop-shadow(0 0 42px rgba(255, 244, 190, .85)) brightness(1.5); transform: scale(1.11) rotate(3deg); }
+  100% { filter: drop-shadow(0 0 8px rgba(255, 244, 190, 0)) brightness(1.1); opacity: 0; transform: scale(1.3) rotate(0deg); }
 }
 
 .crack-overlay {
   position: absolute; left: 0; top: 0; z-index: 2; width: 100%; height: 72%;
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.85)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
   pointer-events: none;
+}
+/* Without this, the egg photo fades out on its own (finalFlash ends at
+   opacity 0) while these crack lines/chips stay fully opaque, leaving them
+   floating alone on the background for the rest of the completion pause. */
+.egg-tap.complete .crack-overlay {
+  animation: crackFadeOut 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes crackFadeOut {
+  0%, 45% { opacity: 1; }
+  100% { opacity: 0; }
 }
 .crack-line {
   stroke: #fff8e6;
@@ -150,18 +164,37 @@ const at = (stage) => props.crackCount / props.frames >= stage / 7
 }
 .crack-hole.revealed { opacity: 0.95; transform: scale(1); }
 
+.shockwave {
+  position: absolute; left: 50%; top: 46%; width: 46%; height: 46%; z-index: 2;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 4px solid rgba(255, 244, 190, .9);
+  pointer-events: none;
+  animation: shockwaveExpand .65s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.shockwave-delay { animation-delay: .1s; border-width: 2px; }
+@keyframes shockwaveExpand {
+  0% { transform: translate(-50%, -50%) scale(.3); opacity: .9; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+
 .burst { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .burst i {
   position: absolute; left: 50%; top: 40%; width: 7px; height: 7px; border-radius: 1px;
   background: linear-gradient(#fff6d0, #f4d26b);
   transform-origin: center;
-  animation: shardFly 0.55s ease-out both;
-  animation-delay: calc(var(--n) * 6ms);
-  transform: rotate(calc(var(--n) * 36deg)) translateY(0);
+  animation: shardFly .7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation-delay: calc(var(--n) * 8ms);
+  transform: rotate(calc(var(--n) * 25.7deg)) translateY(0);
+}
+.burst i.gold {
+  width: 9px; height: 9px;
+  background: linear-gradient(#ffe37a, #f5a400);
+  box-shadow: 0 0 6px rgba(255, 200, 60, .8);
 }
 @keyframes shardFly {
-  0% { opacity: 1; transform: rotate(calc(var(--n) * 36deg)) translateY(0) scale(1); }
-  100% { opacity: 0; transform: rotate(calc(var(--n) * 36deg)) translateY(-72px) scale(0.4); }
+  0% { opacity: 1; transform: rotate(calc(var(--n) * 25.7deg)) translateY(0) scale(1); }
+  100% { opacity: 0; transform: rotate(calc(var(--n) * 25.7deg)) translateY(-96px) scale(0.3); }
 }
 
 .progress { width: 72%; height: 8px; margin-top: 22px; overflow: hidden; border-radius: 99px; background: #071b37; border: 1px solid rgba(91, 180, 242, 0.18); }
