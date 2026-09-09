@@ -1,9 +1,11 @@
 <script setup>
-import GameIcon from './GameIcon.vue'
 import coinIcon from '../assets/coin-icon.png'
 import title from '../assets/ui/play-history/title.png'
 import rowBg from '../assets/ui/play-history/row.png'
 import btnHome from '../assets/ui/play-history/btn-home-gold.png'
+import emptyIcon from '../assets/ui/play-history/empty-icon.png'
+import emptySubtitle from '../assets/ui/play-history/empty-subtitle.png'
+import emptyTitle from '../assets/ui/play-history/empty-title.png'
 
 defineProps({
   entries: { type: Array, required: true },
@@ -28,8 +30,9 @@ function formatClock(ts) {
     <img class="scene-title" :src="title" alt="ประวัติการเล่น GS CLAW EGG" />
 
     <div v-if="!entries.length" class="empty-state">
-      <GameIcon name="history" />
-      <p>ยังไม่มีประวัติการคีบไข่</p>
+      <img class="empty-icon" :src="emptyIcon" alt="" />
+      <img class="empty-title" :src="emptyTitle" alt="ยังไม่มีประวัติการเล่น" />
+      <img class="empty-subtitle" :src="emptySubtitle" alt="เมื่อคุณเริ่มเล่น รายการจะแสดงที่นี่" />
     </div>
 
     <ul v-else class="history-list">
@@ -61,10 +64,11 @@ function formatClock(ts) {
 
 .empty-state {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 10px; color: #6f95b8; padding: 40px 0;
+  gap: 6px; padding: 40px 0;
 }
-.empty-state .g-icon { width: 40px; height: 40px; opacity: 0.6; }
-.empty-state p { margin: 0; font-size: 13px; }
+.empty-icon { width: min(220px, 56vw); height: auto; margin-bottom: 6px; }
+.empty-title { width: min(320px, 80vw); height: auto; }
+.empty-subtitle { width: min(300px, 76vw); height: auto; }
 
 .history-list { list-style: none;  padding: 0; display: flex; flex-direction: column; }
 .history-row { position: relative; width: 100%; }
