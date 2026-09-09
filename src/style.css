@@ -24,6 +24,8 @@ button:disabled { opacity: .45; }
   overflow: hidden;
   background: #051033 linear-gradient(180deg, #08163f 0%, #030a1e 60%, #01040c 100%);
   background-size: cover;
+  display: flex;
+  flex-direction: column;
 }
 .game-phone.flash::after {
   content:"";
@@ -32,6 +34,20 @@ button:disabled { opacity: .45; }
   z-index:30;
   background:#c9f1ff;
   animation: flash .26s ease both;
+  /* Purely decorative — must never intercept taps. If sceneFlash ever gets
+     left stuck true (e.g. a token-guarded early return between setting it
+     and clearing it), this still fades to opacity:0 after .26s but stays
+     in the DOM covering the whole app, silently eating every click/tap
+     underneath on every screen until reload. */
+  pointer-events:none;
+}
+
+.debug-badge {
+  position: absolute; top: 2px; left: 2px; z-index: 60;
+  background: rgba(255, 0, 60, .85); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 1.3;
+  padding: 2px 5px; border-radius: 0 0 6px 0;
+  pointer-events: none;
 }
 
 .preloader {
@@ -60,12 +76,13 @@ button:disabled { opacity: .45; }
    source asset (see topbar.png: pill1 x 3.68%-39.6%, pill2 x 41.44%-77.36%,
    speaker x 79.19%-96.69%, all within a 2172x724 canvas). */
 .hud {
-  padding: 25px 14px 5px;
+  padding: 13px 14px 5px;
   display:flex;
   align-items:center;
   gap:15px;
   position:relative;
   z-index:15;
+  flex-shrink: 0;
 }
 .gs-badge {
   width:30%; max-width:110px; height:auto; object-fit:contain; flex-shrink:0;
@@ -98,8 +115,15 @@ button:disabled { opacity: .45; }
   pointer-events:none;
 }
 
+/* Fills exactly whatever height is left under the HUD (via flex-grow on
+   .game-phone's flex column), rather than a hardcoded "100dvh minus the
+   HUD's height" guess — that guess drifted stale after HUD sizing changed
+   elsewhere, silently making every screen a bit taller than the viewport
+   and forcing the whole page to scroll. That stray scroll is what broke
+   press-and-hold/tap targets sitting near the bottom on real touch devices
+   (the browser interpreted the drift as a scroll gesture mid-press). */
 .screen {
-  min-height:calc(100dvh - 68px);
+  flex: 1 0 auto;
   padding:22px 18px 20px;
   display:flex;
   flex-direction:column;
@@ -167,7 +191,7 @@ button:disabled { opacity: .45; }
 .img-btn:disabled img { filter:grayscale(.5) brightness(.7); }
 
 .home-screen { justify-content:flex-start; padding-top:10px; }
-.home-title { width:min(420px, 92vw); height:auto; margin:0 0 6px; filter:drop-shadow(0 6px 18px rgba(0,0,0,.45)); }
+.home-title { width:min(420px, 80vw); height:auto; margin:0 0 6px; filter:drop-shadow(0 6px 18px rgba(0,0,0,.45)); }
 .home-cabinet { width:min(400px, 88vw); height:auto; filter:drop-shadow(0 16px 24px rgba(0,0,0,.4)); }
 .home-start-btn { width:min(360px, 88vw); margin-top:-56px; margin-bottom:16px; position:relative; z-index:2; }
 .home-nav-row { width:100%; max-width:420px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
@@ -196,6 +220,3 @@ button:disabled { opacity: .45; }
 
 @keyframes flash { 0%{opacity:0} 45%{opacity:.9} 100%{opacity:0} }
 
-@media (max-width:480px) {
-  .screen { min-height:calc(100dvh - 68px); }
-}
