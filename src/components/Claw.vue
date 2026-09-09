@@ -1,24 +1,35 @@
 <script setup>
 import { computed } from 'vue'
-import clawOpen from '../assets/claw-open.png'
-import clawHoldingEgg from '../assets/claw-holding-egg.png'
+import clawOpen from '../assets/ui/gameplay/claw-open.png'
+import clawHoldingBlue from '../assets/ui/gameplay/claw-holding-blue.png'
+import clawHoldingWhite from '../assets/ui/gameplay/claw-holding-white.png'
+import clawHoldingBlack from '../assets/ui/gameplay/claw-holding-black.png'
+import clawHoldingSilver from '../assets/ui/gameplay/claw-holding-silver.png'
+
+const holdingByColor = {
+  blue: clawHoldingBlue,
+  white: clawHoldingWhite,
+  black: clawHoldingBlack,
+  silver: clawHoldingSilver,
+}
 
 const props = defineProps({
   x: { type: Number, required: true }, // % across the track
   y: { type: Number, required: true }, // px drop offset
   phase: { type: String, default: 'idle' }, // idle|pause|descend|grip|ascend|settle
   holding: { type: Boolean, default: false },
+  heldColor: { type: String, default: 'blue' }, // which egg color the claw is gripping
 })
 
-const cableHeight = computed(() => 42 + props.y)
-const clawSrc = computed(() => (props.holding ? clawHoldingEgg : clawOpen))
+const cableHeight = computed(() => 8 + props.y)
+const clawSrc = computed(() => (props.holding ? (holdingByColor[props.heldColor] || clawHoldingBlue) : clawOpen))
 </script>
 
 <template>
   <div
     class="claw-rig"
     :class="`phase-${phase}`"
-    :style="{ left: x + '%', transform: `translate(-50%, ${y}px)` }"
+    :style="{ left: x + '%', transform: 'translateX(-50%)' }"
   >
     <div class="rail-mount"></div>
     <div class="cable" :style="{ height: cableHeight + 'px' }"></div>
