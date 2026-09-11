@@ -18,38 +18,46 @@ import btnStart from "./assets/ui/home/btn-start.png";
 import navHowToPlay from "./assets/ui/home/nav-how-to-play.png";
 import navHistory from "./assets/ui/home/nav-history.png";
 import navRewards from "./assets/ui/home/nav-rewards.png";
-import coinNoteBanner from "./assets/ui/how-to-play/note.png";
 
 import GameMachine from "./components/GameMachine.vue";
 import EggOpening from "./components/EggOpening.vue";
 import RewardResult from "./components/RewardResult.vue";
 import TicketExchange from "./components/TicketExchange.vue";
-import BatchPicker from "./components/BatchPicker.vue";
 import CoinRewards from "./components/CoinRewards.vue";
 import HistoryList from "./components/HistoryList.vue";
 import BatchSummary from "./components/BatchSummary.vue";
 import HowToPlay from "./components/HowToPlay.vue";
 import LimitReached from "./components/LimitReached.vue";
 import { useClawDrive } from "./composables/useClawDrive";
+import { clawGameApi, ApiError } from "./lib/api";
+import { initLiff } from "./lib/liff";
 
-const EXCHANGE_RATE = 10; // points per ticket
-const EXCHANGE_MAX = 100; // max points per exchange, grants +1 bonus ticket
 const ROUND_TIME = 30; // matches the timer shown in the 08_gameplay / 06_claw_success mockups
 const FRAMES = 4;
 // Matches TicketExchange's max-per-exchange cap (10 tickets + 1 bonus) — the
 // most a single round (or a live adjustment on the play screen) can ever use.
 const MAX_BATCH = 11;
 
-// gameState: idle | exchange | batchPick | howToPlay | playing | stirring
+// gameState: idle | exchange | howToPlay | playing | stirring
 //          | grabbing | opening | result | summary | rewards | history
 // ?dev=1 skips ticket/point cost and the round timer so the claw screen
 // can be reached repeatedly while iterating on its UI.
 const devMode = new URLSearchParams(window.location.search).get("dev") === "1";
 
 const gameState = ref("idle");
+// Sensible offline defaults for ?dev=1 — overwritten by the real values
+// from get_game_state as soon as that resolves (see loadGameState below).
 const points = ref(120);
 const coins = ref(1250);
 const tickets = ref(0);
+const campaign = ref({
+  exchangeRate: 10,
+  exchangeMax: 100,
+  bonusMinPoint: 100,
+  bonusQty: 1,
+});
+const lineID = ref(null);
+const apiError = ref("");
 const timer = ref(ROUND_TIME);
 const message = ref("");
 const motionEnabled = ref(false);
@@ -74,7 +82,6 @@ const stirTrigger = ref(0);
 const batchSize = ref(1);
 const batchIndex = ref(0);
 const batchRewards = ref([]);
-const batchRevealIndex = ref(0);
 const historyLog = ref([]);
 let historySeq = 0;
 
@@ -115,8 +122,9 @@ function makeEggs() {
 
 const eggs = ref(makeEggs());
 
-// Weighted reward draw, synced to "GS Game.pdf" p.3's official rate table.
-const rewards = [
+// Weighted reward draw, synced to "GS Game.pdf" p.3's official rate table —
+// used only in ?dev=1 (the real game gets its result from play_claw).
+const DEV_REWARDS = [
   { type: "prize", label: "ทอง 50 สตางค์", weight: 0.02 },
   { type: "prize", label: "ทอง 25 สตางค์", weight: 0.02 },
   { type: "prize", label: "HomePod mini", weight: 0.07 },
@@ -131,42 +139,55 @@ const rewards = [
   { type: "coin", label: "50 Coin", value: 50, weight: 17.03 },
 ];
 
-// Coin-shop catalog, synced to "GS Game.pdf" p.4-5's official prices.
-const coinCatalog = [
+// Coin-shop catalog for ?dev=1 only — the real game fetches this from
+// get_redeem_list (see openRewards) since stock/prices live server-side.
+const DEV_CATALOG = [
   {
     id: "lotus100",
     label: "บัตรกำนัล Lotus 100 บาท",
     cost: 300,
     image: rewardLotus,
+    qty: 99,
   },
   {
     id: "lotus200",
     label: "บัตรกำนัล Lotus 200 บาท",
     cost: 600,
     image: rewardLotus,
+    qty: 99,
   },
   {
     id: "lotus300",
     label: "บัตรกำนัล Lotus 300 บาท",
     cost: 900,
     image: rewardLotus,
+    qty: 99,
   },
   {
     id: "ptt500",
     label: "บัตรกำนัล ปตท. 500 บาท",
     cost: 1500,
     image: rewardPtt,
+    qty: 99,
   },
   {
     id: "ptt1000",
     label: "บัตรกำนัล ปตท. 1,000 บาท",
     cost: 3000,
     image: rewardPtt,
+    qty: 99,
   },
-  { id: "homepod", label: "HomePod mini", cost: 11670, image: rewardHomepod },
+  {
+    id: "homepod",
+    label: "HomePod mini",
+    cost: 11670,
+    image: rewardHomepod,
+    qty: 99,
+  },
 ];
+const coinCatalog = ref(devMode ? DEV_CATALOG : []);
 
-const canExchange = computed(() => points.value >= EXCHANGE_RATE);
+const canExchange = computed(() => points.value >= campaign.value.exchangeRate);
 const canPlayBatch = computed(() => tickets.value >= 1);
 const isLimitReached = computed(
   () => !canPlayBatch.value && !canExchange.value,
@@ -191,8 +212,8 @@ function imageForReward(r) {
 const rewardImage = computed(() => imageForReward(reward.value));
 
 function ticketsForAmount(amount) {
-  const base = Math.floor(amount / EXCHANGE_RATE);
-  const bonus = amount >= EXCHANGE_MAX ? 1 : 0;
+  const base = Math.floor(amount / campaign.value.exchangeRate);
+  const bonus = amount >= campaign.value.bonusMinPoint ? campaign.value.bonusQty : 0;
   return { base, bonus, total: base + bonus };
 }
 
@@ -200,97 +221,77 @@ function delay(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function confirmExchange(amount) {
-  if (amount > points.value || amount < EXCHANGE_RATE) return;
-  const { total, bonus } = ticketsForAmount(amount);
-  points.value -= amount;
-  tickets.value += total;
-  message.value = bonus
-    ? `แลกสำเร็จ! ได้รับ ${total} สิทธิ์ (รวมโบนัส +${bonus})`
-    : `แลกสำเร็จ! ได้รับ ${total} สิทธิ์`;
-  gameState.value = "batchPick";
+async function confirmExchange(amount) {
+  if (amount > points.value || amount < campaign.value.exchangeRate) return;
+  if (devMode) {
+    const { total, bonus } = ticketsForAmount(amount);
+    points.value -= amount;
+    tickets.value += total;
+    message.value = bonus
+      ? `แลกสำเร็จ! ได้รับ ${total} สิทธิ์ (รวมโบนัส +${bonus})`
+      : `แลกสำเร็จ! ได้รับ ${total} สิทธิ์`;
+    gameState.value = "exchange";
+    return;
+  }
+  try {
+    const data = await clawGameApi.exchangeTicket(lineID.value, amount);
+    points.value = data.point;
+    tickets.value = data.ticket.balance;
+    const bonus = amount >= campaign.value.bonusMinPoint ? campaign.value.bonusQty : 0;
+    message.value = bonus
+      ? `แลกสำเร็จ! ได้รับ ${data.ticket_gained} สิทธิ์ (รวมโบนัส +${bonus})`
+      : `แลกสำเร็จ! ได้รับ ${data.ticket_gained} สิทธิ์`;
+    gameState.value = "exchange";
+  } catch (err) {
+    message.value = err instanceof ApiError ? err.message : "แลกสิทธิ์ไม่สำเร็จ ลองใหม่อีกครั้ง";
+  }
 }
 
-function exchangeMore() {
-  gameState.value = "exchange";
-}
-
-function openBatchPick() {
+function openTicketScreen() {
   if (devMode) {
     batchSize.value = 1;
     startRound();
     return;
   }
-  if (canPlayBatch.value) {
-    gameState.value = "batchPick";
-  } else if (canExchange.value) {
-    gameState.value = "exchange";
-  }
-  // otherwise isLimitReached is true and the home screen already shows
-  // the LimitReached screen instead of this button.
+  gameState.value = "exchange";
+  // isLimitReached already gates this button out of the home screen
+  // entirely (see the LimitReached branch above), so reaching here always
+  // means the player can either exchange more Points or already has
+  // tickets to spend.
 }
 
-function confirmBatch(size) {
-  const n = Math.max(1, Math.min(size, tickets.value));
+// The exchange screen's own "เริ่มเกม" button always starts a single round
+// — batch size beyond 1 is chosen live on the play screen itself (see
+// GameMachine's ticket-row stepper / adjustBatchQty), not here.
+function startFromExchange() {
+  if (!canPlayBatch.value) return;
+  batchSize.value = 1;
   batchIndex.value = 0;
   batchRewards.value = [];
-  if (n === 1) {
-    batchSize.value = 1;
-    startRound();
-  } else {
-    startBatchRound(n);
-  }
+  startRound();
 }
 
-// Batch mode (n > 1): the claw grabs once and the egg is tapped open once,
-// then every ticket's reward is resolved together and shown as a list —
-// the player never repeats the grab/crack animation per ticket.
-function startBatchRound(n) {
-  if (n < 1 || tickets.value < n) {
-    goHome();
+async function redeemCoinReward(item) {
+  if (coins.value < item.cost || item.qty <= 0) return;
+  if (devMode) {
+    coins.value -= item.cost;
+    historyLog.value.unshift({
+      id: ++historySeq,
+      ts: Date.now(),
+      label: item.label,
+      coinValue: item.cost,
+      kind: "redeem",
+    });
+    message.value = `แลก ${item.label} สำเร็จ!`;
     return;
   }
-  stopTimer();
-  transitionToken++;
-  tickets.value -= n;
-  batchSize.value = n;
-  eggs.value = makeEggs();
-  drive.setX(50);
-  clawAnim.value = "idle";
-  heldEgg.value = null;
-  targetEggId.value = null;
-  crackCount.value = 0;
-  justCompleted.value = false;
-  reward.value = null;
-  sceneFlash.value = false;
-  timer.value = ROUND_TIME;
-  gameState.value = "playing";
-  needsStir.value = true;
-  readyMessage.value = "";
-  // Left blank: the shake-pill's own artwork already carries the
-  // "shake before you start" instruction while the gate is up.
-  message.value = "";
-  // The countdown only starts once the shake gate clears (see stirEggs) —
-  // otherwise the mandatory first shake would eat into the player's time.
-  // Ask for motion access right away so a real shake works immediately,
-  // with no tap required first — browsers that need an explicit user
-  // gesture for this (iOS Safari) will just no-op here; the shake-pill tap
-  // is still there as the fallback for those.
-  if (!motionEnabled.value) enableMotion();
-}
-
-function redeemCoinReward(item) {
-  if (coins.value < item.cost) return;
-  coins.value -= item.cost;
-  historyLog.value.unshift({
-    id: ++historySeq,
-    ts: Date.now(),
-    label: item.label,
-    image: item.image,
-    kind: "redeem",
-    coinValue: item.cost,
-  });
-  message.value = `แลก ${item.label} สำเร็จ!`;
+  try {
+    const data = await clawGameApi.redeemCoin(lineID.value, item.id);
+    coins.value = data?.coin ?? coins.value - item.cost;
+    message.value = `แลก ${item.label} สำเร็จ!`;
+  } catch (err) {
+    message.value = err instanceof ApiError ? err.message : "แลกของไม่สำเร็จ ลองใหม่อีกครั้ง";
+  }
 }
 
 function startRound() {
@@ -300,7 +301,10 @@ function startRound() {
   }
   stopTimer();
   transitionToken++;
-  if (!devMode) tickets.value--;
+  // Tickets aren't spent locally — the real spend happens server-side in
+  // grabEgg() via play_claw, which is the single source of truth for the
+  // balance afterward. Not touching `tickets` here keeps it accurate even
+  // if the player backs out before actually grabbing.
   batchIndex.value++;
   eggs.value = makeEggs();
   drive.setX(50);
@@ -329,17 +333,15 @@ function startRound() {
 }
 
 // Lets the player fine-tune how many eggs this round will open directly on
-// the play screen (before grabbing), mirroring BatchPicker's own stepper.
-// `tickets` stays the un-committed pool shown as "สิทธิ์คงเหลือ" here; any
-// increase/decrease just moves the difference between that pool and the
-// already-reserved batchSize, capped at MAX_BATCH total either way.
+// the play screen (before grabbing) — the exchange screen's "เริ่มเกม"
+// always starts at 1, so this is the only place batch size goes up.
+// `tickets` is the real (unspent) balance the whole time — nothing is
+// reserved locally, so this only has to clamp the on-screen choice.
 function adjustBatchQty(nextQty) {
   if (!["playing", "stirring"].includes(gameState.value)) return;
-  const maxTotal = Math.min(MAX_BATCH, tickets.value + batchSize.value);
+  const maxTotal = Math.min(MAX_BATCH, tickets.value);
   const clamped = Math.max(1, Math.min(nextQty, maxTotal));
-  const delta = clamped - batchSize.value;
-  if (delta === 0) return;
-  tickets.value -= delta;
+  if (clamped === batchSize.value) return;
   batchSize.value = clamped;
   message.value = "";
 }
@@ -396,6 +398,15 @@ function stirEggs() {
   });
 }
 
+// Holds whatever play_claw returned for the round currently in progress,
+// consumed by revealReward/resolveBatchAll once the crack animation ends —
+// the reward is decided here (grab-time), just not shown yet.
+let pendingResults = [];
+
+function mapResult(r) {
+  return { type: r.is_coin ? "coin" : "prize", label: r.reward_name, value: r.coin_gained };
+}
+
 async function grabEgg(auto = false) {
   if (!["playing", "stirring"].includes(gameState.value)) return;
   stopTimer();
@@ -413,7 +424,13 @@ async function grabEgg(auto = false) {
   // browser, which could otherwise leave the drive's direction stuck non-
   // zero forever. Force it to a clean stop right here regardless.
   drive.release();
-  message.value = auto ? "หมดเวลา ระบบกำลังคีบให้อัตโนมัติ" : "กำลังคีบ...";
+  message.value = auto ? "หมดเวลา ระบบกำลังคีบให้อัตโนมัติ" : "";
+
+  // Fire the real play the moment the grab is committed, so the network
+  // round-trip overlaps the descend/grip/ascend animation below instead of
+  // adding its own wait after the crack finishes. Only awaited just before
+  // we actually need the results.
+  const playPromise = devMode ? null : clawGameApi.playClaw(lineID.value, batchSize.value);
 
   try {
     clawAnim.value = "pause";
@@ -441,16 +458,25 @@ async function grabEgg(auto = false) {
     await delay(160);
     if (token !== transitionToken) return;
 
+    if (!devMode) {
+      const data = await playPromise;
+      pendingResults = data.results;
+      tickets.value = data.ticket.balance;
+      coins.value = data.coin;
+    }
+
     proceedToOpening(token);
   } catch (err) {
     // Whatever went wrong, never leave the player stuck on a dead
     // 'grabbing' screen with no controls and no way forward.
     console.error("grabEgg failed, recovering to playing", err);
     if (token === transitionToken) {
+      target.hidden = false;
+      heldEgg.value = null;
       clawAnim.value = "idle";
       targetEggId.value = null;
       gameState.value = "playing";
-      message.value = "เกิดข้อผิดพลาด ลองคีบใหม่อีกครั้ง";
+      message.value = err instanceof ApiError ? err.message : "เกิดข้อผิดพลาด ลองคีบใหม่อีกครั้ง";
     }
   }
 }
@@ -468,14 +494,17 @@ async function proceedToOpening(token) {
   justCompleted.value = false;
   message.value =
     batchSize.value > 1
-      ? `แตะที่ไข่เพื่อเปิดพร้อมกันทั้งหมด ${batchSize.value} ฟอง`
+      ? `แตะที่ไข่ย้ำ ๆ ให้แตกครบ ${FRAMES} ครั้ง เพื่อเปิดพร้อมกันทั้งหมด ${batchSize.value} ฟอง`
       : `แตะที่ไข่ย้ำ ๆ ให้แตกครบ ${FRAMES} ครั้ง`;
 }
 
 async function tapEgg() {
   if (gameState.value !== "opening" || crackCount.value >= FRAMES) return;
   const batchMode = batchSize.value > 1;
-  crackCount.value = batchMode ? FRAMES : crackCount.value + 1;
+  // Cracking always takes the same number of taps regardless of batch
+  // size — only what happens once it's fully cracked differs (one reward
+  // vs. revealing the whole batch one at a time).
+  crackCount.value += 1;
   beep(320 + crackCount.value * 35, 0.035);
   if (navigator.vibrate) navigator.vibrate(18);
   if (crackCount.value >= FRAMES) {
@@ -514,51 +543,43 @@ function celebrate() {
 }
 
 function revealReward() {
-  reward.value = drawReward();
-  if (reward.value.type === "coin") coins.value += reward.value.value;
-  batchRewards.value.push(reward.value);
-  logReward(reward.value);
-  gameState.value = "result";
-  celebrate();
-}
-
-// Batch mode still grabs/cracks once, but every ticket's reward now gets
-// its own reveal on the result screen (one at a time, via nextBatchReveal)
-// instead of jumping straight to the combined list — the summary screen
-// still shows at the end as a recap.
-function resolveBatchAll() {
-  const n = batchSize.value;
-  batchRewards.value = [];
-  for (let i = 0; i < n; i++) {
-    const r = drawReward();
-    if (r.type === "coin") coins.value += r.value;
-    batchRewards.value.push(r);
-    logReward(r);
-  }
-  batchRevealIndex.value = 0;
-  reward.value = batchRewards.value[0];
-  gameState.value = "result";
-  celebrate();
-}
-
-function nextBatchReveal() {
-  if (batchRevealIndex.value < batchRewards.value.length - 1) {
-    batchRevealIndex.value++;
-    reward.value = batchRewards.value[batchRevealIndex.value];
-    celebrate();
+  if (devMode) {
+    reward.value = drawReward();
+    if (reward.value.type === "coin") coins.value += reward.value.value;
+    logReward(reward.value);
   } else {
-    gameState.value = "summary";
+    reward.value = mapResult(pendingResults[0]);
   }
+  batchRewards.value.push(reward.value);
+  gameState.value = "result";
+  celebrate();
+}
+
+// Batch mode grabs/cracks the egg pile just once, then every ticket's
+// reward resolves together and lands straight on the summary screen as a
+// combined list — no per-ticket reveal step in between.
+function resolveBatchAll() {
+  if (devMode) {
+    batchRewards.value = Array.from({ length: batchSize.value }, () => drawReward());
+    for (const r of batchRewards.value) {
+      if (r.type === "coin") coins.value += r.value;
+      logReward(r);
+    }
+  } else {
+    batchRewards.value = pendingResults.map(mapResult);
+  }
+  gameState.value = "summary";
+  celebrate();
 }
 
 function drawReward() {
-  const total = rewards.reduce((s, r) => s + r.weight, 0);
+  const total = DEV_REWARDS.reduce((s, r) => s + r.weight, 0);
   let n = Math.random() * total;
-  for (const r of rewards) {
+  for (const r of DEV_REWARDS) {
     n -= r.weight;
     if (n <= 0) return r;
   }
-  return rewards.at(-1);
+  return DEV_REWARDS.at(-1);
 }
 
 function playAgain() {
@@ -577,7 +598,10 @@ function playMoreFromSummary() {
     goHome();
     return;
   }
-  gameState.value = "batchPick";
+  batchSize.value = 1;
+  batchIndex.value = 0;
+  batchRewards.value = [];
+  startRound();
 }
 
 function goHome() {
@@ -586,6 +610,109 @@ function goHome() {
   drive.stop();
   gameState.value = "idle";
   message.value = "";
+}
+
+async function loadGameState() {
+  const data = await clawGameApi.getGameState(lineID.value);
+  campaign.value = {
+    exchangeRate: data.campaign.exchange_rate,
+    exchangeMax: data.campaign.exchange_max,
+    bonusMinPoint: data.campaign.bonus_min_point,
+    bonusQty: data.campaign.bonus_qty,
+  };
+  points.value = data.point;
+  coins.value = data.coin;
+  tickets.value = data.ticket.balance;
+  const pending = data.ticket.pending_batch;
+  // Every resume already grants its coins the moment play_claw responds
+  // (see resumePendingBatch) — the same ticket_id must never be replayed
+  // for a second payout. Guard with sessionStorage, not just an in-memory
+  // flag: reloading is exactly the scenario being guarded against, so the
+  // record has to survive the reload that triggers this function again.
+  if (pending && !hasResolvedPendingBatch(pending.ticket_id)) {
+    await resumePendingBatch(pending.ticket_id);
+  }
+}
+
+const RESOLVED_BATCH_KEY = "gsClawEgg:resolvedPendingBatchIds";
+
+function hasResolvedPendingBatch(ticketId) {
+  try {
+    return sessionStorage.getItem(RESOLVED_BATCH_KEY)?.split(",").includes(String(ticketId)) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+function markPendingBatchResolved(ticketId) {
+  try {
+    const seen = sessionStorage.getItem(RESOLVED_BATCH_KEY)?.split(",").filter(Boolean) ?? [];
+    seen.push(String(ticketId));
+    sessionStorage.setItem(RESOLVED_BATCH_KEY, seen.join(","));
+  } catch {
+    /* sessionStorage unavailable (private mode, etc.) — best effort only */
+  }
+}
+
+// Best-effort recovery for a batch left mid-play by an interrupted session
+// (network drop, tab closed mid-grab) — there's no claw/crack animation to
+// replay here, so just resolve it server-side and land straight on the
+// reveal screen with whatever it decided.
+async function resumePendingBatch(ticketId) {
+  const data = await clawGameApi.playClaw(lineID.value);
+  tickets.value = data.ticket.balance;
+  coins.value = data.coin;
+  markPendingBatchResolved(ticketId);
+  batchRewards.value = data.results.map(mapResult);
+  batchSize.value = batchRewards.value.length;
+  // A batch already settled server-side (e.g. an earlier resume that
+  // partially failed after paying out) can legitimately come back empty —
+  // nothing left to show, so just stay on whatever screen we're already on.
+  if (batchSize.value === 0) return;
+  if (batchSize.value > 1) {
+    gameState.value = "summary";
+  } else {
+    reward.value = batchRewards.value[0];
+    gameState.value = "result";
+  }
+}
+
+function mapHistoryRow(row, i) {
+  return {
+    id: i,
+    ts: new Date(row.created_at.replace(" ", "T")).getTime(),
+    label: row.reward_name,
+    coinValue: row.coin ? Math.abs(row.coin) : null,
+    kind: row.type,
+  };
+}
+
+async function openHistory() {
+  gameState.value = "history";
+  if (devMode) return;
+  try {
+    const rows = await clawGameApi.getPlayHistory(lineID.value);
+    historyLog.value = rows.map(mapHistoryRow);
+  } catch (err) {
+    message.value = err instanceof ApiError ? err.message : "โหลดประวัติไม่สำเร็จ";
+  }
+}
+
+async function openRewards() {
+  gameState.value = "rewards";
+  if (devMode) return;
+  try {
+    const rows = await clawGameApi.getRedeemList(lineID.value);
+    coinCatalog.value = rows.map((r) => ({
+      id: r.id,
+      label: r.reward_name,
+      cost: r.value,
+      image: imageForReward({ label: r.reward_name }),
+      qty: r.qty,
+    }));
+  } catch (err) {
+    message.value = err instanceof ApiError ? err.message : "โหลดรายการแลกไม่สำเร็จ";
+  }
 }
 
 async function enableMotion() {
@@ -668,10 +795,32 @@ function preloadImage(src) {
   });
 }
 
-onMounted(() => {
-  Promise.all(allImages.map(preloadImage)).then(() => {
+onMounted(async () => {
+  const imagesDone = Promise.all(allImages.map(preloadImage));
+  // ?dev=1 skips LIFF/API entirely and stays fully offline.
+  //
+  // LIFF check is commented out for now — there's no real LIFF ID yet, so
+  // every non-dev load (with or without ?apitest=1) uses the fixed test
+  // lineID from .env against the real API instead. Once a real LIFF ID
+  // exists, swap the block below back to the initLiff() one to get each
+  // player's own lineID instead of everyone sharing the test account.
+  let stateDone = Promise.resolve();
+  if (!devMode) {
+    lineID.value = import.meta.env.VITE_TEST_LINE_ID;
+    stateDone = loadGameState();
+  }
+  // else if (!devMode) {
+  //   stateDone = (async () => {
+  //     lineID.value = await initLiff();
+  //     await loadGameState();
+  //   })();
+  // }
+  try {
+    await Promise.all([imagesDone, stateDone]);
     appReady.value = true;
-  });
+  } catch (err) {
+    apiError.value = err?.message || "เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้ง";
+  }
 });
 
 onBeforeUnmount(() => {
@@ -690,16 +839,15 @@ onBeforeUnmount(() => {
     >
       <transition name="preloader-fade">
         <div v-if="!appReady" class="preloader">
-          <span class="preloader-spinner"></span>
-          <p class="preloader-label">กำลังโหลด...</p>
+          <template v-if="apiError">
+            <p class="preloader-label error">{{ apiError }}</p>
+          </template>
+          <template v-else>
+            <span class="preloader-spinner"></span>
+            <p class="preloader-label">กำลังโหลด...</p>
+          </template>
         </div>
       </transition>
-
-      <!-- Temporary debug readout to track down the "everything stops
-           responding" report — remove once that's confirmed fixed. -->
-      <div class="debug-badge">
-        {{ gameState }} / {{ clawAnim }} / ctrl:{{ controlsEnabled }}
-      </div>
 
       <header class="hud">
         <img class="gs-badge" :src="gsBatteryBadge" alt="GS Battery" />
@@ -736,7 +884,7 @@ onBeforeUnmount(() => {
             alt="GS Claw Egg คีบไข่ลุ้นรางวัล เกมคีบไข่ลุ้นรางวัลจาก GS BATTERY"
           />
           <img class="home-cabinet" :src="cabinetHero" alt="" />
-          <button class="img-btn home-start-btn" @click="openBatchPick">
+          <button class="img-btn home-start-btn" @click="openTicketScreen">
             <img :src="btnStart" alt="เริ่มเล่น ใช้ 10 Points" />
           </button>
 
@@ -744,18 +892,13 @@ onBeforeUnmount(() => {
             <button class="img-btn" @click="gameState = 'howToPlay'">
               <img :src="navHowToPlay" alt="วิธีเล่น" />
             </button>
-            <button class="img-btn" @click="gameState = 'history'">
+            <button class="img-btn" @click="openHistory">
               <img :src="navHistory" alt="ประวัติการเล่น" />
             </button>
-            <button class="img-btn" @click="gameState = 'rewards'">
+            <button class="img-btn" @click="openRewards">
               <img :src="navRewards" alt="แลกรางวัล" />
             </button>
           </div>
-          <img
-            class="home-footer-note"
-            :src="coinNoteBanner"
-            alt="Coin ไม่มีวันหมดอายุ"
-          />
           <p v-if="message" class="message">{{ message }}</p>
         </section>
 
@@ -763,17 +906,10 @@ onBeforeUnmount(() => {
           v-else-if="gameState === 'exchange'"
           key="exchange"
           :points="points"
-          @back="goHome"
-          @confirm="confirmExchange"
-        />
-
-        <BatchPicker
-          v-else-if="gameState === 'batchPick'"
-          key="batchPick"
           :tickets="tickets"
           @back="goHome"
-          @confirm="confirmBatch"
-          @exchange-more="exchangeMore"
+          @confirm="confirmExchange"
+          @start="startFromExchange"
         />
 
         <HowToPlay
@@ -830,7 +966,6 @@ onBeforeUnmount(() => {
           key="opening"
           :crack-count="crackCount"
           :frames="FRAMES"
-          :single-tap="batchSize > 1"
           :message="message"
           :just-completed="justCompleted"
           @tap="tapEgg"
@@ -841,6 +976,7 @@ onBeforeUnmount(() => {
           key="summary"
           :rewards="batchRewards"
           :tickets="tickets"
+          :confetti="confetti"
           @play-more="playMoreFromSummary"
           @go-home="goHome"
         />
@@ -852,11 +988,8 @@ onBeforeUnmount(() => {
           :reward-image="rewardImage"
           :can-play="canPlayBatch"
           :confetti="confetti"
-          :batch-index="batchSize > 1 ? batchRevealIndex + 1 : 0"
-          :batch-total="batchSize > 1 ? batchRewards.length : 0"
           @play-again="playAgain"
           @go-home="goHome"
-          @next="nextBatchReveal"
         />
       </transition>
     </section>

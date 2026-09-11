@@ -8,7 +8,6 @@ import eggMascot from '../assets/ui/egg-open/egg-mascot.png'
 const props = defineProps({
   crackCount: { type: Number, required: true },
   frames: { type: Number, default: 8 },
-  singleTap: { type: Boolean, default: false },
   message: { type: String, default: '' },
   justCompleted: { type: Boolean, default: false },
 })
@@ -61,8 +60,8 @@ const at = (stage) => props.crackCount / props.frames >= stage / 7
       </span>
     </button>
 
-    <div v-if="!singleTap" class="progress"><span :style="{ width: (Math.min(crackCount, frames) / frames * 100) + '%' }"></span></div>
-    <p class="message">{{ message }}<template v-if="!singleTap"> {{ Math.min(crackCount, frames) }}/{{ frames }}</template></p>
+    <div class="progress"><span :style="{ width: (Math.min(crackCount, frames) / frames * 100) + '%' }"></span></div>
+    <p class="message">{{ message }} {{ Math.min(crackCount, frames) }}/{{ frames }}</p>
   </section>
 </template>
 

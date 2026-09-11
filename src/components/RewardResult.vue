@@ -1,5 +1,4 @@
 <script setup>
-import { computed } from "vue";
 import title from "../assets/ui/receive-prize/title.png";
 import coinStack from "../assets/ui/receive-prize/coin-stack.png";
 import labelYouGot from "../assets/ui/receive-prize/label-you-got.png";
@@ -9,21 +8,14 @@ import btnClaim from "../assets/ui/receive-prize/btn-claim.png";
 import btnAgain from "../assets/ui/receive-prize/btn-again.png";
 import noteCoin from "../assets/ui/receive-prize/note-coin.png";
 
-const props = defineProps({
+defineProps({
   reward: { type: Object, default: null },
   rewardImage: { type: String, required: true },
   canPlay: { type: Boolean, default: false },
   confetti: { type: Boolean, default: false },
-  // batchTotal > 0 means this reveal is one of several from a multi-ticket
-  // round; batchIndex is its 1-based position within that batch.
-  batchIndex: { type: Number, default: 0 },
-  batchTotal: { type: Number, default: 0 },
 });
 
-defineEmits(["play-again", "go-home", "next"]);
-
-const isBatchStep = computed(() => props.batchTotal > 1);
-const isLastInBatch = computed(() => props.batchIndex >= props.batchTotal);
+defineEmits(["play-again", "go-home"]);
 </script>
 
 <template>
@@ -66,26 +58,17 @@ const isLastInBatch = computed(() => props.batchIndex >= props.batchTotal);
     </div>
     <h1 v-else class="prize-label">{{ reward?.label }}</h1>
 
-    <p v-if="isBatchStep" class="batch-progress">
-      รางวัลที่ {{ batchIndex }}/{{ batchTotal }}
-    </p>
-
     <div class="result-actions">
-      <button v-if="isBatchStep" class="cta compact" @click="$emit('next')">
-        <strong>{{ isLastInBatch ? "ดูสรุปผลรวม" : "ถัดไป" }}</strong>
+      <button class="img-btn" @click="$emit('go-home')">
+        <img :src="btnClaim" alt="รับรางวัล" />
       </button>
-      <template v-else>
-        <button class="img-btn" @click="$emit('go-home')">
-          <img :src="btnClaim" alt="รับรางวัล" />
-        </button>
-        <button
-          class="img-btn"
-          :disabled="!canPlay"
-          @click="$emit('play-again')"
-        >
-          <img :src="btnAgain" alt="เล่นอีกครั้ง" />
-        </button>
-      </template>
+      <button
+        class="img-btn"
+        :disabled="!canPlay"
+        @click="$emit('play-again')"
+      >
+        <img :src="btnAgain" alt="เล่นอีกครั้ง" />
+      </button>
     </div>
 
     <img
@@ -175,13 +158,6 @@ const isLastInBatch = computed(() => props.batchIndex >= props.batchTotal);
   font-size: 22px;
   max-width: 90%;
   color: #ffd739;
-}
-.batch-progress {
-  margin: 0 0 8px;
-  color: #7fd0ff;
-  font-size: 12.5px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
 }
 .reward-note {
   margin: 0;

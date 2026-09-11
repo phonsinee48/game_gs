@@ -25,8 +25,12 @@ const remainAfter = computed(
   () => props.coins - (confirmItem.value?.cost ?? 0),
 );
 
+function isDisabled(item) {
+  return props.coins < item.cost || item.qty <= 0;
+}
+
 function openConfirm(item) {
-  if (props.coins < item.cost) return;
+  if (isDisabled(item)) return;
   confirmItem.value = item;
 }
 
@@ -53,13 +57,13 @@ function confirmRedeem() {
       <li v-for="item in catalog" :key="item.id">
         <button
           class="reward-row"
-          :class="{ disabled: coins < item.cost }"
-          :disabled="coins < item.cost"
+          :class="{ disabled: isDisabled(item) }"
+          :disabled="isDisabled(item)"
           @click="openConfirm(item)"
         >
           <img
             class="row-bg"
-            :src="coins < item.cost ? rowDisabled : rowActive"
+            :src="isDisabled(item) ? rowDisabled : rowActive"
             alt=""
           />
           <span class="row-thumb"
@@ -157,6 +161,7 @@ function confirmRedeem() {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   color: #ffd739;
   font-size: clamp(16px, 5.5vw, 26px);
@@ -242,6 +247,7 @@ function confirmRedeem() {
   height: 30px;
 }
 .row-cost-num {
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   color: #fff;
   font-size: 24px;
 }
@@ -358,6 +364,7 @@ function confirmRedeem() {
   align-items: center;
   justify-content: flex-start;
   color: #ffd739;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   font-size: clamp(18px, 5.4vw, 24px);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
@@ -386,6 +393,7 @@ function confirmRedeem() {
   align-items: center;
   justify-content: flex-start;
   color: #ffd739;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   font-size: clamp(18px, 5.4vw, 24px);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);

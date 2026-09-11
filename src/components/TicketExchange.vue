@@ -10,15 +10,22 @@ import btnConfirm from "../assets/ui/point-exchange/btn-confirm.png";
 import summaryCard from "../assets/ui/point-exchange/summary-card.png";
 import btnCancel from "../assets/ui/point-exchange/btn-cancel.png";
 import btnConfirmSummary from "../assets/ui/point-exchange/btn-confirm-summary.png";
+import labelTicketsRemain from "../assets/ui/point-exchange/GS Game (67).png";
+import labelTicketsUnit from "../assets/ui/point-exchange/GS Game (68).png";
+import btnStartGame from "../assets/ui/point-exchange/GS Game (65).png";
+import btnStartGameDisabled from "../assets/ui/point-exchange/GS Game (66).png";
 
 const RATE = 10;
 const MAX_AMOUNT = 100;
 
 const props = defineProps({
   points: { type: Number, required: true },
+  tickets: { type: Number, required: true },
 });
 
-const emit = defineEmits(["back", "confirm"]);
+const emit = defineEmits(["back", "confirm", "start"]);
+
+const canStart = computed(() => props.tickets >= 1);
 
 const maxAffordable = computed(() =>
   Math.min(MAX_AMOUNT, Math.floor(props.points / RATE) * RATE),
@@ -69,7 +76,14 @@ function confirm() {
 
     <div class="point-panel">
       <img class="point-panel-bg" :src="panelBg" alt="" />
-      <span class="panel-balance-num">{{ points.toLocaleString() }}</span>
+      <!-- Covers panel.png's own baked "Point คงเหลือ" label so the ticket
+           balance below can take over this row instead. -->
+      <div class="panel-balance-cover"></div>
+      <div class="panel-ticket-row">
+        <img class="panel-ticket-label" :src="labelTicketsRemain" alt="" />
+        <span class="panel-ticket-num">{{ tickets }}</span>
+        <img class="panel-ticket-unit" :src="labelTicketsUnit" alt="สิทธิ์" />
+      </div>
 
       <button
         class="img-btn stepper-btn-img stepper-minus"
@@ -116,6 +130,17 @@ function confirm() {
         @click="openSummary"
       >
         <img :src="btnConfirm" alt="ยืนยันแลก" />
+      </button>
+
+      <button
+        class="img-btn start-game-btn"
+        :disabled="!canStart"
+        @click="emit('start')"
+      >
+        <img
+          :src="canStart ? btnStartGame : btnStartGameDisabled"
+          :alt="canStart ? 'เริ่มเกม' : 'สิทธิ์ไม่เพียงพอ กรุณาแลก Point ก่อน'"
+        />
       </button>
     </div>
     <p v-if="points < RATE" class="rule-note warn">
@@ -177,52 +202,91 @@ function confirm() {
 }
 
 /* The panel art (panel.png) is stretched taller than its natural ratio so
-   the quick-picks/ticket-chip/confirm button can sit inside its border too.
-   object-fit:fill stretches every row by the same vertical factor, so a
-   percentage-of-height position within the original art (e.g. the baked
-   "Point คงเหลือ" label) still lands at that same percentage after the
-   stretch. The container's aspect-ratio height (760) is set so 100% lands
-   right where the border art + confirm button actually end — all child
-   percentages below are scaled by the same 1.25x factor from an earlier
-   950-tall version so the visual layout is pixel-identical, just with the
-   leftover empty space beneath the border cropped off. Keep every child's
-   percentage in that same ratio to each other if you resize this again. */
+   every row (balance, stepper, quick-picks, ticket-chip, confirm AND the
+   "เริ่มเกม" button) can sit inside its border. object-fit:fill stretches
+   every row by the same vertical factor, so a percentage-of-height position
+   within the original art still lands at that same percentage regardless of
+   how tall the container box is made — growing the aspect-ratio's height
+   only changes how far apart everything is spaced, never their alignment to
+   the art. The container's aspect-ratio height (980) is set so 100% lands
+   right where the border art + "เริ่มเกม" button actually end. Keep every
+   child's percentage in that same ratio to each other if you resize this
+   again. */
 .point-panel {
   position: relative;
   width: min(400px, 94vw);
-  aspect-ratio: 569 / 760;
+  aspect-ratio: 569 / 980;
+  /* The box's own aspect-ratio (and every child row's top-% inside it) is a
+     coupled system tuned around fixed-px button heights — shrinking the
+     ratio to remove the dead space below "เริ่มเกม" pulls every row's %
+     offset closer together in px terms while the buttons' own heights stay
+     fixed, which starts colliding rows well before the trailing space is
+     gone. Trimming the unused space with a negative margin instead leaves
+     every child's position untouched and only pulls whatever comes after
+     the panel (the back button) up to ignore it. Ratio matches this panel's
+     own width formula: 96px of dead space at the 366px width this produces
+     on a 390px-wide phone. */
+  margin-bottom: calc(-0.262 * min(400px, 94vw));
 }
 .point-panel-bg {
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 97.5%;
+  height: 90.5%;
   object-fit: fill;
 }
-.panel-balance-num {
+/* Covers panel.png's own baked "Point คงเหลือ" label + balance number area
+   (roughly x:22-94%, y:9-23% of this box) so the ticket-balance row can take
+   over that whole top row instead — sampled from the flat navy background
+   that fills the rest of the panel's interior. */
+.panel-balance-cover {
   position: absolute;
-  left: 60%;
-  width: 32%;
-  top: 10.6%;
-  height: 11.25%;
+  left: 22%;
+  width: 72%;
+  top: 9%;
+  height: 14%;
+  border-radius: 4px;
+}
+.panel-ticket-row {
+  position: absolute;
+  left: 6%;
+  width: 88%;
+  top: 8.2%;
+  height: 6.5%;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
+  gap: 6px;
+}
+.panel-ticket-label {
+  height: 100%;
+  width: auto;
+  display: block;
+}
+.panel-ticket-num {
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   color: #ffd739;
-  font-size: 25px;
+  font-size: 30px;
+  line-height: 1;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   font-variant-numeric: tabular-nums;
+}
+.panel-ticket-unit {
+  height: 85%;
+  width: auto;
+  display: block;
 }
 .panel-big-num {
   position: absolute;
   left: 0;
   width: 100%;
-  top: 18.75%;
+  top: 12.75%;
   height: 17.5%;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   color: #fff;
   font-size: clamp(36px, 11vw, 52px);
@@ -236,7 +300,7 @@ function confirm() {
   position: absolute;
   left: 0;
   width: 100%;
-  top: 35%;
+  top: 27%;
   height: 7.5%;
   display: flex;
   align-items: center;
@@ -248,7 +312,7 @@ function confirm() {
 }
 .stepper-btn-img {
   position: absolute;
-  top: 22.5%;
+  top: 17.5%;
   width: 20%;
 }
 .stepper-minus {
@@ -262,7 +326,7 @@ function confirm() {
   position: absolute;
   left: 15%;
   width: 70%;
-  top: 45%;
+  top: 36%;
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -296,7 +360,7 @@ function confirm() {
   position: absolute;
   left: 27%;
   width: 45%;
-  top: 56.25%;
+  top: 48.25%;
 }
 .ticket-chip-bg {
   width: 100%;
@@ -312,6 +376,7 @@ function confirm() {
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   color: #fff;
   font-size: clamp(16px, 5vw, 22px);
@@ -319,7 +384,7 @@ function confirm() {
 }
 
 .img-btn img {
-  width: 90%;
+  width: 100%;
   height: auto;
   display: block;
   margin: 0 auto;
@@ -333,7 +398,7 @@ function confirm() {
   position: absolute;
   left: 0;
   width: 100%;
-  top: 67.5%;
+  top: 45.5%;
   margin: 0;
   text-align: center;
   color: #8fbede;
@@ -342,13 +407,29 @@ function confirm() {
 }
 .confirm-btn {
   position: absolute;
-  left: 11%;
-  width: 78%;
-  top: 70.75%;
+  left: 18%;
+  width: 65%;
+  top: 58.75%;
   margin: 0;
 }
+.start-game-btn {
+  position: absolute;
+  left: 11%;
+  width: 78%;
+  top: 70.5%;
+  margin: 0;
+}
+/* GS Game (66).png already bakes in the greyed-out button art plus the
+   "สิทธิ์ไม่เพียงพอ" warning line beneath it, so the default disabled
+   treatment (grayscale + dim) would just muddy art that's already designed
+   to read as disabled — keep this button's normal drop-shadow instead. */
+.start-game-btn:disabled img {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
+}
+
 .back-btn {
   width: min(300px, 80vw);
+  margin-top: 16px;
 }
 
 .modal-backdrop {
@@ -390,6 +471,7 @@ function confirm() {
   display: flex;
   align-items: center;
   color: #ffd739;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   font-size: clamp(13px, 3.6vw, 18px);
 }
@@ -402,6 +484,7 @@ function confirm() {
   display: flex;
   align-items: center;
   color: #ffd739;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   font-size: clamp(13px, 3.6vw, 18px);
 }
@@ -414,6 +497,7 @@ function confirm() {
   display: flex;
   align-items: center;
   color: #ffd739;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 900;
   font-size: clamp(13px, 3.6vw, 18px);
   font-variant-numeric: tabular-nums;
@@ -422,6 +506,7 @@ function confirm() {
 .summary-get small,
 .summary-remain small {
   color: #eaf6ff;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   font-weight: 600;
   margin-left: 5px;
   font-size: 0.75em;

@@ -48,12 +48,9 @@ const holding = computed(() =>
 );
 const grabbing = computed(() => props.clawAnim !== "idle");
 
-// How many eggs this round will open, adjustable right here (mirrors
-// BatchPicker's own stepper) up to whatever's left in the ticket pool,
-// capped at maxBatch overall.
-const maxUsable = computed(() =>
-  Math.min(props.maxBatch, props.tickets + props.batchSize),
-);
+// How many eggs this round will open, adjustable right here up to
+// whatever's left in the ticket pool, capped at maxBatch overall.
+const maxUsable = computed(() => Math.min(props.maxBatch, props.tickets));
 
 // Deliberately NOT using setPointerCapture here. It sounds like the right
 // tool for a hold-button (guarantee the release fires on this element even
@@ -236,7 +233,6 @@ function setAllQty() {
 .cabinet {
   position: relative;
   width: 100%;
-  max-width: 305px;
   margin: 0 auto;
   aspect-ratio: 529 / 688;
 }
@@ -284,7 +280,6 @@ function setAllQty() {
 .shake-pill {
   position: relative;
   width: 100%;
-  max-width: 320px;
   margin: -22px auto 0;
 }
 .shake-pill-bg {
@@ -316,14 +311,18 @@ function setAllQty() {
   animation: shakeGateGlow 1s ease-in-out infinite;
 }
 @keyframes shakeGateGlow {
-  0%, 100% { filter: none; }
-  50% { filter: drop-shadow(0 0 10px rgba(120, 210, 255, 0.9)); }
+  0%,
+  100% {
+    filter: none;
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(120, 210, 255, 0.9));
+  }
 }
 
 .ticket-row {
   position: relative;
   width: 100%;
-  max-width: 340px;
   margin: 2px auto 0;
 }
 .ticket-row-bg {
@@ -391,7 +390,6 @@ function setAllQty() {
 
 .control-dock {
   width: 100%;
-  max-width: 320px;
   margin-left: auto;
   margin-right: auto;
   display: grid;

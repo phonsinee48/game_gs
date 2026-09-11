@@ -4,7 +4,6 @@ import step1 from '../assets/ui/how-to-play/step1.png'
 import step2 from '../assets/ui/how-to-play/step2.png'
 import step3 from '../assets/ui/how-to-play/step3.png'
 import step4 from '../assets/ui/how-to-play/step4.png'
-import note from '../assets/ui/how-to-play/note.png'
 import btnConfirm from '../assets/ui/how-to-play/btn-confirm.png'
 
 defineEmits(['close'])
@@ -20,8 +19,6 @@ defineEmits(['close'])
       <img :src="step3" alt="3. กดปุ่มคีบ เพื่อคีบไข่ 1 ฟอง" />
       <img :src="step4" alt="4. แตะเพื่อเปิดไข่ ลุ้นรับ Coin หรือรางวัล" />
     </div>
-
-    <img class="scene-note" :src="note" alt="Coin ไม่มีวันหมดอายุ" />
 
     <div class="how-to-play-actions">
       <button class="img-btn" @click="$emit('close')"><img :src="btnConfirm" alt="เข้าใจแล้ว" /></button>
