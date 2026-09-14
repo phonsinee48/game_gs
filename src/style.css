@@ -42,7 +42,7 @@ button:disabled { opacity: .45; }
   inset:0;
   z-index:30;
   background:#c9f1ff;
-  animation: flash .26s ease both;
+  animation: flash .2s ease both;
   /* Purely decorative — must never intercept taps. If sceneFlash ever gets
      left stuck true (e.g. a token-guarded early return between setting it
      and clearing it), this still fades to opacity:0 after .26s but stays
@@ -115,6 +115,50 @@ button:disabled { opacity: .45; }
   box-shadow:0 0 4px rgba(0,0,0,.7);
   transform:translate(-50%,-50%) rotate(-45deg);
   pointer-events:none;
+}
+
+/* Floats over whichever gameplay screen is currently showing (see App.vue's
+   auto-toggle-fab v-if) — anchored to .game-phone rather than living inside
+   GameMachine so it survives every step of the AUTO cycle (playing ->
+   grabbing -> opening -> result -> summary -> playing ...), not just the
+   moments GameMachine itself is on screen. */
+.auto-toggle-fab {
+  position: absolute;
+  top: 68px;
+  right: 14px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(101, 197, 255, .5);
+  background: linear-gradient(180deg, rgba(20, 60, 110, .72), rgba(6, 20, 42, .88));
+  color: #9fd3ff;
+  font-family: 'Baloo 2', Inter, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: .5px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+  transition: background .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+}
+.auto-toggle-fab-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #5b7ea3;
+  transition: background .2s ease, box-shadow .2s ease;
+}
+.auto-toggle-fab.active {
+  color: #061428;
+  background: linear-gradient(180deg, #7fe0ff, #23a8ff);
+  border-color: #9fe8ff;
+  box-shadow: 0 0 12px rgba(60, 190, 255, .75);
+}
+.auto-toggle-fab.active .auto-toggle-fab-dot {
+  background: #0a8a3a;
+  box-shadow: 0 0 5px #4dff8a;
 }
 
 /* Fills exactly whatever height is left under the HUD (via flex-grow on
@@ -197,6 +241,7 @@ button:disabled { opacity: .45; }
 .home-cabinet { width:100%; height:auto; filter:drop-shadow(0 16px 24px rgba(0,0,0,.4)); }
 .home-start-btn { width:min(360px, 88vw); margin-top:-56px; margin-bottom:16px; position:relative; z-index:2; }
 .home-nav-row { width:100%; max-width:420px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.home-howtoplay-btn { width:100%; max-width:420px; margin-top:10px; }
 
 .cta {
   width:82%;

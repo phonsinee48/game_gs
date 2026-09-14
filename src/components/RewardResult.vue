@@ -13,6 +13,21 @@ defineProps({
   rewardImage: { type: String, required: true },
   canPlay: { type: Boolean, default: false },
   confetti: { type: Boolean, default: false },
+  // Set when play_claw stopped short of the full batch because a reward
+  // ran out of stock mid-draw — explains why fewer prizes came back than
+  // tickets spent.
+  note: { type: String, default: "" },
+  // Set (to e.g. { current: 3, total: 10 }) while this reveal is one egg
+  // in the middle of an auto-played batch (see advanceBatch in App.vue) —
+  // swaps the play-again/go-home actions for a short "egg x/y" caption,
+  // since the app itself moves on to the next egg (or the summary, once
+  // this was the last one) a moment later without any tap needed.
+  batchProgress: { type: Object, default: null },
+  // True when this single-ticket reveal is about to auto-start the next
+  // round on its own (the AUTO toggle, see toggleAutoRepeat in App.vue) —
+  // same idea as batchProgress, just for a batch size of 1 where there's
+  // no "egg x/y" count to show.
+  autoContinuing: { type: Boolean, default: false },
 });
 
 defineEmits(["play-again", "go-home"]);
@@ -58,7 +73,15 @@ defineEmits(["play-again", "go-home"]);
     </div>
     <h1 v-else class="prize-label">{{ reward?.label }}</h1>
 
-    <div class="result-actions">
+    <p v-if="note" class="stock-note">{{ note }}</p>
+
+    <p v-if="batchProgress" class="batch-progress">
+      ฟองที่ {{ batchProgress.current }}/{{ batchProgress.total }}
+    </p>
+    <p v-else-if="autoContinuing" class="batch-progress">
+      กำลังเล่นต่ออัตโนมัติ...
+    </p>
+    <div v-else class="result-actions">
       <button class="img-btn" @click="$emit('go-home')">
         <img :src="btnClaim" alt="รับรางวัล" />
       </button>
@@ -163,6 +186,24 @@ defineEmits(["play-again", "go-home"]);
   margin: 0;
   color: #a9cbe4;
   font-size: 12px;
+}
+.stock-note {
+  margin: 0 0 8px;
+  padding: 6px 14px;
+  max-width: 90%;
+  color: #ffcf8f;
+  background: rgba(255, 169, 0, 0.12);
+  border: 1px solid rgba(255, 169, 0, 0.4);
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.batch-progress {
+  margin: 4px 0 0;
+  color: #9fd8ff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 .reward-note-img {
   width: min(375px, 100vw);

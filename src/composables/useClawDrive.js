@@ -1,8 +1,8 @@
 import { onBeforeUnmount, ref } from 'vue'
 
-const MAX_SPEED = 70 // % of track per second
-const ACCEL = 260 // % per second^2 while a direction is held
-const DECEL = 340 // % per second^2 once released
+const MAX_SPEED = 100 // % of track per second
+const ACCEL = 380 // % per second^2 while a direction is held
+const DECEL = 480 // % per second^2 once released
 const MIN_X = 11
 const MAX_X = 89
 

@@ -63,7 +63,7 @@ const clawSrc = computed(() => (props.holding ? (holdingByColor[props.heldColor]
   margin: 0 auto;
   background: linear-gradient(#f1fbff, #69b9eb);
   box-shadow: 0 0 10px rgba(100, 201, 255, 0.75);
-  transition: height 0.5s cubic-bezier(0.32, 0.72, 0.32, 1);
+  transition: height 0.38s cubic-bezier(0.32, 0.72, 0.32, 1);
 }
 .claw-img {
   width: 108px;
@@ -86,11 +86,11 @@ const clawSrc = computed(() => (props.holding ? (holdingByColor[props.heldColor]
   opacity: 0.5;
 }
 
-.phase-pause .claw-img { animation: anticipate 0.24s ease both; }
+.phase-pause .claw-img { animation: anticipate 0.2s ease both; }
 .phase-descend .claw-img { animation: none; }
-.phase-grip .claw-img { animation: grip 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.phase-grip .claw-img { animation: grip 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 .phase-ascend .claw-img { animation: none; }
-.phase-settle .claw-img { animation: settle 0.34s ease both; }
+.phase-settle .claw-img { animation: settle 0.28s ease both; }
 
 @keyframes anticipate {
   0% { transform: translateY(0) scale(1); }

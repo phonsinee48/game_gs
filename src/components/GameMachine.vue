@@ -25,6 +25,11 @@ const props = defineProps({
   maxBatch: { type: Number, default: 11 },
   heldEggColor: { type: String, default: "blue" },
   needsStir: { type: Boolean, default: false },
+  // True while the claw has already finished its own grab animation but
+  // is still waiting on play_claw's response (see App.vue's grabEgg) — a
+  // slow connection can leave that gap running several seconds past the
+  // animation, which otherwise just looks like the claw froze.
+  awaitingResult: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -123,6 +128,15 @@ function setAllQty() {
           :holding="holding"
           :held-color="heldEggColor"
         />
+
+        <!-- Same loading treatment as TicketExchange's exchanging-overlay —
+             covers the working area with a dim backdrop + spinner + label,
+             instead of leaving the claw just sitting there once its own
+             grab animation is done but play_claw hasn't answered yet. -->
+        <div v-if="awaitingResult" class="awaiting-overlay">
+          <span class="preloader-spinner"></span>
+          <p class="awaiting-label">{{ message }}</p>
+        </div>
       </div>
     </div>
 
@@ -133,7 +147,7 @@ function setAllQty() {
       @click="needsStir && emit('shake-tap')"
     >
       <img class="shake-pill-bg" :src="shakeBanner" alt="" />
-      <p v-if="!needsStir" class="shake-pill-text">{{ message }}</p>
+      <p v-if="!needsStir && !awaitingResult && message" class="shake-pill-text">{{ message }}</p>
     </div>
 
     <div class="ticket-row">
@@ -277,6 +291,35 @@ function setAllQty() {
   overflow: hidden;
 }
 
+/* Shown once the claw's own grip/ascend/settle animation is done but
+   play_claw hasn't answered yet (see App.vue's awaitingResult) — a slow
+   connection can leave that gap running for several seconds, and with
+   nothing else moving on screen it reads as the claw having frozen
+   mid-grab rather than the app still working on the player's behalf.
+   Same treatment as TicketExchange's exchanging-overlay (dim backdrop +
+   .preloader-spinner, a shared global class) for a consistent loading look
+   across the app. */
+.awaiting-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(2, 8, 20, 0.6);
+}
+.awaiting-label {
+  margin: 0;
+  color: #9fd3ff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-align: center;
+  padding: 0 12px;
+}
+
 .shake-pill {
   position: relative;
   width: 100%;
@@ -287,6 +330,14 @@ function setAllQty() {
   height: auto;
   display: block;
 }
+/* shake-banner.png has its own "เขย่ามือถือก่อนเริ่ม" prompt baked into the
+   artwork itself (that's what's actually showing while needsStir gates the
+   round) — this pill gets reused afterward to surface live messages
+   (tap-count hints, batch round captions, and now the play_claw wait) as a
+   plain transparent overlay in the same spot, which used to just print
+   straight on top of that baked text once both were visible at once. The
+   backdrop here blocks that out so whichever message is live is what
+   actually reads. */
 .shake-pill-text {
   position: absolute;
   left: 21%;
@@ -294,15 +345,19 @@ function setAllQty() {
   top: 0;
   height: 100%;
   margin: 0;
+  padding: 0 14px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  gap: 6px;
   color: #eaf6ff;
   font-size: 11.5px;
   font-weight: 700;
   line-height: 1.25;
   text-align: left;
   text-shadow: 0 0 8px rgba(60, 190, 255, 0.5);
+  background: rgba(4, 14, 32, 0.92);
+  border-radius: 0 20px 20px 0;
 }
 .shake-pill.shake-gate {
   cursor: pointer;

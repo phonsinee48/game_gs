@@ -61,7 +61,15 @@ watch(
   width: 58px;
   height: 78px;
   transform: translate(-50%, -50%) rotate(var(--base-rot));
-  transition: opacity 0.2s ease, transform 0.3s ease;
+  /* left/top only actually change when a neighbour rolls into a just-
+     grabbed egg's gap (see settleNearbyEggs in App.vue) — everywhere else
+     an egg's slot is fixed for the whole round, so this transition is
+     silent until that happens. */
+  transition:
+    opacity 0.2s ease,
+    transform 0.3s ease,
+    left 0.45s cubic-bezier(0.33, 1, 0.68, 1),
+    top 0.45s cubic-bezier(0.33, 1, 0.68, 1);
 }
 .pile-egg.hidden {
   opacity: 0;

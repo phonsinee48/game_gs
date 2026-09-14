@@ -3,17 +3,27 @@ import { computed } from 'vue'
 import title from '../assets/ui/egg-open/title.png'
 import subtitle from '../assets/ui/egg-open/subtitle.png'
 import tapIcon from '../assets/ui/egg-open/tap-icon.png'
-import eggMascot from '../assets/ui/egg-open/egg-mascot.png'
+import eggBlue from '../assets/ui/gameplay/egg-blue.png'
+import eggWhite from '../assets/ui/gameplay/egg-white.png'
+import eggBlack from '../assets/ui/gameplay/egg-black.png'
+import eggSilver from '../assets/ui/gameplay/egg-silver.png'
+
+const EGG_IMAGES = { blue: eggBlue, white: eggWhite, black: eggBlack, silver: eggSilver }
 
 const props = defineProps({
   crackCount: { type: Number, required: true },
   frames: { type: Number, default: 8 },
   message: { type: String, default: '' },
   justCompleted: { type: Boolean, default: false },
+  // Matches whichever egg the claw actually grabbed (see heldEgg in
+  // App.vue) — this screen used to always show the same blue mascot
+  // regardless of which colored egg was pulled from the pile.
+  eggColor: { type: String, default: 'blue' },
 })
 
 defineEmits(['tap'])
 
+const eggImage = computed(() => EGG_IMAGES[props.eggColor] || eggBlue)
 const glow = computed(() => 0.3 + (Math.min(props.crackCount, props.frames) / props.frames) * 0.95)
 // The crack artwork always has 7 progressive stages; scale them against
 // however many taps (frames) this round actually requires, so the egg
@@ -29,7 +39,7 @@ const at = (stage) => props.crackCount / props.frames >= stage / 7
     <button class="egg-tap" :class="{ complete: justCompleted }" @click="$emit('tap')">
       <span class="egg-glow" :style="{ opacity: glow }"></span>
 
-      <img class="egg-photo" :src="eggMascot" alt="" />
+      <img class="egg-photo" :src="eggImage" alt="" />
 
       <img v-if="crackCount === 0" class="tap-hint" :src="tapIcon" alt="" />
 

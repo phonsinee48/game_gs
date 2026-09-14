@@ -13,6 +13,10 @@ const props = defineProps({
   rewards: { type: Array, required: true },
   tickets: { type: Number, required: true },
   confetti: { type: Boolean, default: false },
+  // Set when play_claw stopped short of the full batch because a reward
+  // ran out of stock mid-draw — explains why fewer prizes came back than
+  // tickets spent.
+  note: { type: String, default: "" },
 });
 
 defineEmits(["play-more", "go-home"]);
@@ -76,6 +80,8 @@ const coinTotal = computed(() =>
         </li>
       </ul>
     </div>
+
+    <p v-if="note" class="stock-note">{{ note }}</p>
 
     <div class="summary-actions">
       <button class="img-btn" @click="$emit('go-home')">
@@ -253,6 +259,18 @@ const coinTotal = computed(() =>
   font-weight: 700;
   font-size: clamp(11px, 3.2vw, 14px);
   flex-shrink: 0;
+}
+
+.stock-note {
+  margin: 0 0 12px;
+  padding: 6px 14px;
+  width: min(380px, 92vw);
+  color: #ffcf8f;
+  background: rgba(255, 169, 0, 0.12);
+  border: 1px solid rgba(255, 169, 0, 0.4);
+  border-radius: 10px;
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .summary-actions {
