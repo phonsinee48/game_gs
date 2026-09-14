@@ -156,7 +156,7 @@ function confirmRedeem() {
   position: absolute;
   left: 56.7%;
   width: 41%;
-  top: 0;
+  top: 6%;
   height: 100%;
   display: flex;
   align-items: center;
