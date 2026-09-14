@@ -21,6 +21,8 @@ const MAX_AMOUNT = 100;
 const props = defineProps({
   points: { type: Number, required: true },
   tickets: { type: Number, required: true },
+  exchanging: { type: Boolean, default: false },
+  message: { type: String, default: "" },
 });
 
 const emit = defineEmits(["back", "confirm", "start"]);
@@ -73,6 +75,12 @@ function confirm() {
       :src="titleBanner"
       alt="แลก Point เป็นสิทธิ์เล่น อัตราแลก 10 Point = 1 สิทธิ์ แลกสูงสุดครั้งละ 100 Point (10 สิทธิ์)"
     />
+    <!-- Sits above the panel rather than below it — .point-panel has a
+         negative bottom margin pulling .back-btn up over its own dead
+         space, which swallowed this when it lived down there (either
+         squashed to nothing or painted over, depending on the exact
+         margin math for the current viewport width). -->
+    <p v-if="message" class="exchange-message">{{ message }}</p>
 
     <div class="point-panel">
       <img class="point-panel-bg" :src="panelBg" alt="" />
@@ -126,7 +134,7 @@ function confirm() {
 
       <button
         class="img-btn confirm-btn"
-        :disabled="!canConfirm"
+        :disabled="!canConfirm || exchanging"
         @click="openSummary"
       >
         <img :src="btnConfirm" alt="ยืนยันแลก" />
@@ -134,7 +142,7 @@ function confirm() {
 
       <button
         class="img-btn start-game-btn"
-        :disabled="!canStart"
+        :disabled="!canStart || exchanging"
         @click="emit('start')"
       >
         <img
@@ -142,6 +150,15 @@ function confirm() {
           :alt="canStart ? 'เริ่มเกม' : 'สิทธิ์ไม่เพียงพอ กรุณาแลก Point ก่อน'"
         />
       </button>
+
+      <!-- The summary modal closes the instant it's confirmed, well before
+           points/tickets actually update from the exchangeTicket response —
+           without this, the panel just sits there unchanged (looking stuck)
+           until that request resolves. -->
+      <div v-if="exchanging" class="exchanging-overlay">
+        <span class="preloader-spinner"></span>
+        <p class="exchanging-label">กำลังแลกสิทธิ์...</p>
+      </div>
     </div>
     <p v-if="points < RATE" class="rule-note warn">
       Point ไม่พอสำหรับแลกสิทธิ์
@@ -426,10 +443,41 @@ function confirm() {
 .start-game-btn:disabled img {
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
 }
+.exchange-message {
+  width: min(400px, 90vw);
+  margin: 0 0 8px;
+  color: #b9dcf6;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.3;
+}
 
 .back-btn {
   width: min(300px, 80vw);
-  margin-top: 16px;
+  margin-top: 40px;
+}
+
+/* Covers the whole panel (not just the confirm/start buttons) so it's
+   obvious something is happening even on a slow connection, rather than
+   the screen just sitting there identical to before the tap. */
+.exchanging-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(2, 8, 20, 0.6);
+  border-radius: 20px;
+}
+.exchanging-label {
+  margin: 0;
+  color: #9fd3ff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 .modal-backdrop {

@@ -25,7 +25,17 @@ async function request(path, { method = 'GET', params, body } = {}) {
   }
 
   const res = await fetch(url, opts)
-  const json = await res.json()
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    // A non-2xx response with an empty/HTML body (a bare 500, a proxy error
+    // page, ...) fails res.json() with a raw SyntaxError whose message is
+    // meaningless to a player ("Unexpected end of JSON input") — surface
+    // the actual HTTP status as a normal ApiError instead so callers show
+    // their usual Thai fallback message rather than that browser internal.
+    throw new ApiError(String(res.status), `เซิร์ฟเวอร์ขัดข้อง (${res.status}) ลองใหม่อีกครั้ง`)
+  }
   if (!json.status) throw new ApiError(json.code, json.message)
   return json.data
 }
@@ -60,5 +70,8 @@ export const clawGameApi = {
   },
   getPlayHistory(lineID) {
     return request('get_play_history', { params: { lineID } })
+  },
+  getRedeemHistory(lineID) {
+    return request('get_redeem_history', { params: { lineID } })
   },
 }
