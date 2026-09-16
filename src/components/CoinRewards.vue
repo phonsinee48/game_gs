@@ -1,17 +1,17 @@
 <script setup>
 import { computed, ref } from "vue";
-import coinIcon from "../assets/coin-icon.png";
-import title from "../assets/ui/reward-exchange/title.png";
-import coinBalanceBanner from "../assets/ui/reward-exchange/coin.png";
-import rowActive from "../assets/ui/reward-exchange/row-active.png";
-import rowDisabled from "../assets/ui/reward-exchange/row-disabled.png";
-import btnHome from "../assets/ui/common/btn-home-blue.png";
-import confirmFrame from "../assets/ui/reward-redeemed/frame.png";
-import confirmTitle from "../assets/ui/reward-redeemed/title.png";
-import confirmItemPanel from "../assets/ui/reward-redeemed/item-panel.png";
-import confirmNote from "../assets/ui/reward-redeemed/note.png";
-import confirmBtnCancel from "../assets/ui/reward-redeemed/btn-cancel.png";
-import confirmBtnConfirm from "../assets/ui/reward-redeemed/btn-confirm.png";
+import coinIcon from "../assets/coin-icon.webp";
+import title from "../assets/ui/reward-exchange/title.webp";
+import coinBalanceBanner from "../assets/ui/reward-exchange/coin.webp";
+import rowActive from "../assets/ui/reward-exchange/row-active.webp";
+import rowDisabled from "../assets/ui/reward-exchange/row-disabled.webp";
+import btnHome from "../assets/ui/common/btn-home-blue.webp";
+import confirmFrame from "../assets/ui/reward-redeemed/frame.webp";
+import confirmTitle from "../assets/ui/reward-redeemed/title.webp";
+import confirmItemPanel from "../assets/ui/reward-redeemed/item-panel.webp";
+import confirmNote from "../assets/ui/reward-redeemed/note.webp";
+import confirmBtnCancel from "../assets/ui/reward-redeemed/btn-cancel.webp";
+import confirmBtnConfirm from "../assets/ui/reward-redeemed/btn-confirm.webp";
 
 const props = defineProps({
   coins: { type: Number, required: true },
@@ -28,6 +28,14 @@ const remainAfter = computed(
 function isDisabled(item) {
   return props.coins < item.cost || item.qty <= 0;
 }
+
+// Redeemable items first (stable sort keeps each group in the catalog's own
+// order otherwise) — so what the player can actually afford right now isn't
+// buried below a run of items they can't, especially once Coin changes after
+// a redeem re-sorts the list.
+const sortedCatalog = computed(() =>
+  [...props.catalog].sort((a, b) => Number(isDisabled(a)) - Number(isDisabled(b))),
+);
 
 function openConfirm(item) {
   if (isDisabled(item)) return;
@@ -54,7 +62,7 @@ function confirmRedeem() {
     </div>
 
     <ul class="reward-list">
-      <li v-for="item in catalog" :key="item.id">
+      <li v-for="item in sortedCatalog" :key="item.id">
         <button
           class="reward-row"
           :class="{ disabled: isDisabled(item) }"
