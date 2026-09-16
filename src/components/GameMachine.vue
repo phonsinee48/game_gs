@@ -1,14 +1,18 @@
 <script setup>
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import Claw from "./Claw.vue";
 import EggPile from "./EggPile.vue";
 import GameIcon from "./GameIcon.vue";
-import cabinetBox from "../assets/ui/gameplay/cabinet-box.png";
-import shakeBanner from "../assets/ui/gameplay/shake-banner.png";
-import ticketRow from "../assets/ui/gameplay/ticket-row.png";
-import arrowLeft from "../assets/ui/gameplay/arrow-left.png";
-import arrowRight from "../assets/ui/gameplay/arrow-right.png";
-import btnGrab from "../assets/ui/gameplay/btn-grab.png";
+import cabinetBox from "../assets/ui/gameplay/cabinet-box.webp";
+import shakeBanner from "../assets/ui/gameplay/shake-banner.webp";
+import ticketRowBg from "../assets/ui/gameplay/ticket-row-bg.webp";
+import ticketIcon from "../assets/ui/gameplay/ticket-icon.webp";
+import labelTicketsRemain from "../assets/ui/gameplay/label-tickets-remain.webp";
+import dividerSparkle from "../assets/ui/gameplay/divider-sparkle.webp";
+import btnAutoToggle from "../assets/ui/gameplay/btn-auto-toggle.webp";
+import arrowLeft from "../assets/ui/gameplay/arrow-left.webp";
+import arrowRight from "../assets/ui/gameplay/arrow-right.webp";
+import btnGrab from "../assets/ui/gameplay/btn-grab.webp";
 
 const props = defineProps({
   eggs: { type: Array, required: true },
@@ -21,15 +25,21 @@ const props = defineProps({
   message: { type: String, default: "" },
   stirTrigger: { type: Number, default: 0 },
   tickets: { type: Number, default: 0 },
-  batchSize: { type: Number, default: 1 },
-  maxBatch: { type: Number, default: 11 },
   heldEggColor: { type: String, default: "blue" },
   needsStir: { type: Boolean, default: false },
-  // True while the claw has already finished its own grab animation but
-  // is still waiting on play_claw's response (see App.vue's grabEgg) — a
-  // slow connection can leave that gap running several seconds past the
-  // animation, which otherwise just looks like the claw froze.
-  awaitingResult: { type: Boolean, default: false },
+  // Every egg grabbed so far this session, each { id, color, src, reward } —
+  // shown here as a growing tray of small color-matched icons so the player
+  // can see what they've collected without leaving the play screen, even
+  // though the reward itself stays hidden until the reveal screen (see
+  // App.vue's grabEgg/collectedEggs).
+  collectedEggs: { type: Array, default: () => [] },
+  // NOTE: only reflects/toggles AUTO while this screen itself is mounted —
+  // GameMachine only renders during playing/stirring/grabbing, so once a
+  // round moves on to opening/result/summary this button (and any way to
+  // turn AUTO back off) disappears until the next round lands back here.
+  // Known/accepted tradeoff per explicit direction, not an oversight — see
+  // the ticket-auto-bar comment below.
+  autoActive: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
@@ -40,7 +50,7 @@ const emit = defineEmits([
   "move-end",
   "grab",
   "stir",
-  "adjust-qty",
+  "toggle-auto",
 ]);
 
 const DESCEND_Y = 46;
@@ -53,9 +63,17 @@ const holding = computed(() =>
 );
 const grabbing = computed(() => props.clawAnim !== "idle");
 
-// How many eggs this round will open, adjustable right here up to
-// whatever's left in the ticket pool, capped at maxBatch overall.
-const maxUsable = computed(() => Math.min(props.maxBatch, props.tickets));
+// Distinguishes "never pressed this session" from "pressed and turned back
+// off" — both are the same autoActive:false, but only the latter should
+// dim the button. GameMachine remounts fresh every session (see its own
+// autoActive prop comment), so this naturally resets to false right when
+// the player lands back on this screen, without needing App.vue to track
+// it at all.
+const everToggledAuto = ref(false);
+function handleToggleAuto() {
+  everToggledAuto.value = true;
+  emit("toggle-auto");
+}
 
 // Deliberately NOT using setPointerCapture here. It sounds like the right
 // tool for a hold-button (guarantee the release fires on this element even
@@ -96,15 +114,6 @@ watch(
     if (!enabled && stopActivePress) stopActivePress();
   },
 );
-
-function stepQty(delta) {
-  if (!props.controlsEnabled) return;
-  emit("adjust-qty", props.batchSize + delta);
-}
-function setAllQty() {
-  if (!props.controlsEnabled) return;
-  emit("adjust-qty", maxUsable.value);
-}
 </script>
 
 <template>
@@ -128,15 +137,6 @@ function setAllQty() {
           :holding="holding"
           :held-color="heldEggColor"
         />
-
-        <!-- Same loading treatment as TicketExchange's exchanging-overlay —
-             covers the working area with a dim backdrop + spinner + label,
-             instead of leaving the claw just sitting there once its own
-             grab animation is done but play_claw hasn't answered yet. -->
-        <div v-if="awaitingResult" class="awaiting-overlay">
-          <span class="preloader-spinner"></span>
-          <p class="awaiting-label">{{ message }}</p>
-        </div>
       </div>
     </div>
 
@@ -147,31 +147,52 @@ function setAllQty() {
       @click="needsStir && emit('shake-tap')"
     >
       <img class="shake-pill-bg" :src="shakeBanner" alt="" />
-      <p v-if="!needsStir && !awaitingResult && message" class="shake-pill-text">{{ message }}</p>
+      <p v-if="!needsStir && message" class="shake-pill-text">
+        {{ message }}
+      </p>
     </div>
 
-    <div class="ticket-row">
-      <img class="ticket-row-bg" :src="ticketRow" alt="" />
-      <span class="ticket-row-remain">{{ tickets }}</span>
-      <span class="ticket-row-qty">x{{ batchSize }}</span>
+    <!-- Always present from the moment the round starts (not conditional
+         on collectedEggs actually having anything yet) — popping this whole
+         box (dark background + border) into existence right as the first
+         egg lands, shoving the ticket bar/controls down to make room, read
+         as the screen itself hiccuping/going dark for a beat. Reserving its
+         height up front means every later grab just adds an icon into an
+         already-stable layout instead. -->
+    <div class="collected-tray">
+      <TransitionGroup name="egg-drop" tag="div" class="collected-tray-inner">
+        <img
+          v-for="egg in collectedEggs"
+          :key="egg.id"
+          class="collected-egg"
+          :src="egg.src"
+          alt=""
+        />
+      </TransitionGroup>
+    </div>
+
+    <!-- Only shown while this screen itself is mounted (playing/stirring/
+         grabbing) — once a round moves on to opening/result/summary this
+         disappears along with everything else here, taking the only way to
+         turn AUTO back off with it. Explicit tradeoff, not an oversight
+         (see the autoActive prop comment above). -->
+    <div class="ticket-auto-bar">
+      <img class="ticket-auto-bar-bg" :src="ticketRowBg" alt="" />
+      <img class="ticket-auto-icon" :src="ticketIcon" alt="" />
+      <img
+        class="ticket-auto-label"
+        :src="labelTicketsRemain"
+        alt="สิทธิ์คงเหลือ"
+      />
+      <span class="ticket-auto-num">{{ tickets }}</span>
+      <img class="ticket-auto-divider" :src="dividerSparkle" alt="" />
       <button
-        class="ticket-row-hit ticket-row-minus"
-        :disabled="!controlsEnabled || batchSize <= 1"
-        @click="stepQty(-1)"
-        aria-label="ลดจำนวน"
-      ></button>
-      <button
-        class="ticket-row-hit ticket-row-plus"
-        :disabled="!controlsEnabled || batchSize >= maxUsable"
-        @click="stepQty(1)"
-        aria-label="เพิ่มจำนวน"
-      ></button>
-      <button
-        class="ticket-row-hit ticket-row-all"
-        :disabled="!controlsEnabled || maxUsable <= 1"
-        @click="setAllQty"
-        aria-label="เลือกทั้งหมด"
-      ></button>
+        class="ticket-auto-btn"
+        :class="{ active: autoActive, dulled: !autoActive && everToggledAuto }"
+        @click="handleToggleAuto"
+      >
+        <img :src="btnAutoToggle" alt="AUTO" />
+      </button>
     </div>
 
     <div class="control-dock">
@@ -291,35 +312,6 @@ function setAllQty() {
   overflow: hidden;
 }
 
-/* Shown once the claw's own grip/ascend/settle animation is done but
-   play_claw hasn't answered yet (see App.vue's awaitingResult) — a slow
-   connection can leave that gap running for several seconds, and with
-   nothing else moving on screen it reads as the claw having frozen
-   mid-grab rather than the app still working on the player's behalf.
-   Same treatment as TicketExchange's exchanging-overlay (dim backdrop +
-   .preloader-spinner, a shared global class) for a consistent loading look
-   across the app. */
-.awaiting-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  background: rgba(2, 8, 20, 0.6);
-}
-.awaiting-label {
-  margin: 0;
-  color: #9fd3ff;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  text-align: center;
-  padding: 0 12px;
-}
-
 .shake-pill {
   position: relative;
   width: 100%;
@@ -375,22 +367,95 @@ function setAllQty() {
   }
 }
 
-.ticket-row {
+/* Grows across a whole multi-grab session (see App.vue's collectedEggs) —
+   always a single row regardless of egg count or screen width: each icon
+   shrinks (see .collected-egg's flex-shrink) rather than the row wrapping
+   onto a second line, so the tray's own height — and everything below it —
+   never has to shift as the session goes on. */
+.collected-tray {
+  width: 100%;
+  min-height: 38px;
+  margin: 4px auto 0;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(4, 14, 32, 0.55);
+  border: 1px solid rgba(101, 197, 255, 0.35);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.collected-tray-inner {
+  width: 100%;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+}
+.collected-egg {
+  width: 26px;
+  height: auto;
+  flex: 0 1 26px;
+  min-width: 10px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+}
+/* A freshly-grabbed egg drops in from the cabinet above and settles into
+   its slot, instead of just popping into the tray — the bounce (overshoot
+   past 1 before settling) is what sells "landed" rather than "faded in".
+   Every other already-collected egg shifts over smoothly too (TransitionGroup's
+   built-in FLIP move) as the tray's flex-wrap reflows to make room. */
+.egg-drop-enter-active {
+  transition:
+    transform 0.46s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.25s ease;
+}
+.egg-drop-enter-from {
+  opacity: 0;
+  transform: translateY(-52px) scale(0.3) rotate(-25deg);
+}
+.egg-drop-move {
+  transition: transform 0.3s ease;
+}
+
+.ticket-auto-bar {
   position: relative;
   width: 100%;
-  margin: 2px auto 0;
+  margin: 4px auto 0;
+  aspect-ratio: 1347 / 301;
+  flex-shrink: 0;
 }
-.ticket-row-bg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-.ticket-row-remain {
+.ticket-auto-bar-bg {
   position: absolute;
-  left: 19.8%;
-  width: 17%;
-  top: 38.8%;
-  height: 46.2%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+.ticket-auto-icon {
+  position: absolute;
+  left: 4%;
+  width: 13%;
+  top: 50%;
+  height: auto;
+  transform: translateY(-50%);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+.ticket-auto-label {
+  position: absolute;
+  left: 19%;
+  width: 25%;
+  top: 50%;
+  height: auto;
+  transform: translateY(-50%);
+}
+.ticket-auto-num {
+  position: absolute;
+  left: 45%;
+  width: 9%;
+  top: 50%;
+  height: 60%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -398,49 +463,53 @@ function setAllQty() {
   font-weight: 800;
   line-height: 1;
   color: #fff;
-  font-size: 22px;
+  font-size: clamp(16px, 4.8vw, 22px);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   font-variant-numeric: tabular-nums;
 }
-.ticket-row-qty {
+.ticket-auto-divider {
   position: absolute;
   left: 53.5%;
-  width: 10.3%;
-  top: 46.5%;
-  height: 30.8%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
-  font-weight: 800;
-  line-height: 1;
-  color: #3a2c1e;
-  font-size: 19px;
-  font-variant-numeric: tabular-nums;
+  width: auto;
+  top: 50%;
+  height: 100%;
+  transform: translateY(-50%);
 }
-.ticket-row-hit {
+.ticket-auto-btn {
   position: absolute;
-  top: 3%;
-  height: 94%;
+  left: 65%;
+  width: 37%;
+  top: 50%;
+  transform: translateY(-50%);
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
 }
-.ticket-row-hit:disabled {
-  cursor: not-allowed;
+.ticket-auto-btn img {
+  width: 80%;
+  height: auto;
+  display: block;
+  /* Full color by default — this only dims once the player has actually
+     turned AUTO off (see .dulled below), not just because it starts
+     untouched every time this screen is (re)mounted. */
+  transition: filter 0.2s ease;
 }
-.ticket-row-minus {
-  left: 41%;
-  width: 11%;
+.ticket-auto-btn.dulled img {
+  filter: grayscale(0.75) brightness(0.65);
 }
-.ticket-row-plus {
-  left: 67%;
-  width: 13%;
+.ticket-auto-btn.active img {
+  filter: none;
+  animation: autoBtnPulse 1.1s ease-in-out infinite;
 }
-.ticket-row-all {
-  left: 81%;
-  width: 18%;
+@keyframes autoBtnPulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(255, 60, 220, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(255, 60, 220, 0.95));
+  }
 }
 
 .control-dock {
@@ -467,6 +536,17 @@ function setAllQty() {
 .grab-btn {
   width: 100%;
   touch-action: none;
+}
+/* Overrides the global .img-btn:disabled dim (grayscale + darken) for just
+   these three — they go disabled constantly now (every single grab's own
+   ~1.15s animation, not just the once-per-round pauses this treatment was
+   originally tuned for), so that flicker read as the whole screen going
+   dark for a beat on every grab instead of a rare, meaningful pause. The
+   `disabled` attribute itself still blocks taps either way — this only
+   changes how it looks. */
+.arrow-btn:disabled img,
+.grab-btn:disabled img {
+  filter: none;
 }
 
 @keyframes dangerPulse {
