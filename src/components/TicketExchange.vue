@@ -1,19 +1,14 @@
 <script setup>
 import { computed, ref } from "vue";
-import btnHome from "../assets/ui/common/btn-home-blue.png";
-import titleBanner from "../assets/ui/point-exchange/title.png";
-import panelBg from "../assets/ui/point-exchange/panel.png";
-import btnMinus from "../assets/ui/point-exchange/btn-minus.png";
-import btnPlus from "../assets/ui/point-exchange/btn-plus.png";
-import chipTicket from "../assets/ui/point-exchange/chip-ticket.png";
-import btnConfirm from "../assets/ui/point-exchange/btn-confirm.png";
-import summaryCard from "../assets/ui/point-exchange/summary-card.png";
-import btnCancel from "../assets/ui/point-exchange/btn-cancel.png";
-import btnConfirmSummary from "../assets/ui/point-exchange/btn-confirm-summary.png";
-import labelTicketsRemain from "../assets/ui/point-exchange/GS Game (67).png";
-import labelTicketsUnit from "../assets/ui/point-exchange/GS Game (68).png";
-import btnStartGame from "../assets/ui/point-exchange/GS Game (65).png";
-import btnStartGameDisabled from "../assets/ui/point-exchange/GS Game (66).png";
+import btnHome from "../assets/ui/common/btn-home-blue.webp";
+import titleBanner from "../assets/ui/point-exchange/title.webp";
+import panelBg from "../assets/ui/point-exchange/panel.webp";
+import btnMinus from "../assets/ui/point-exchange/btn-minus.webp";
+import btnPlus from "../assets/ui/point-exchange/btn-plus.webp";
+import chipTicket from "../assets/ui/point-exchange/chip-ticket.webp";
+import labelExchangeAmount from "../assets/ui/point-exchange/label-amount-to-exchange.webp";
+import btnStartGame from "../assets/ui/point-exchange/btn-start-game.webp";
+import btnStartGameDisabled from "../assets/ui/point-exchange/btn-start-game-disabled.webp";
 
 const RATE = 10;
 const MAX_AMOUNT = 100;
@@ -25,8 +20,13 @@ const props = defineProps({
   message: { type: String, default: "" },
 });
 
-const emit = defineEmits(["back", "confirm", "start"]);
+const emit = defineEmits(["back", "start"]);
 
+// Already having tickets always wins — pressing "เริ่มเกม" just plays with
+// those, whatever the stepper happens to be dialed to. Only when there's
+// nothing left to play with does the selected amount actually get spent
+// (see App.vue's startFromExchange), so canPressStart covers both "can
+// play right now" and "can afford to buy in and then play."
 const canStart = computed(() => props.tickets >= 1);
 
 const maxAffordable = computed(() =>
@@ -41,12 +41,10 @@ function ticketsFor(amt) {
 }
 
 const preview = computed(() => ticketsFor(amount.value));
-const canConfirm = computed(
+const canAffordAmount = computed(
   () => amount.value >= RATE && amount.value <= props.points,
 );
-const pointsAfter = computed(() => props.points - amount.value);
-
-const showSummary = ref(false);
+const canPressStart = computed(() => canStart.value || canAffordAmount.value);
 
 function step(delta) {
   const next = amount.value + delta;
@@ -55,16 +53,6 @@ function step(delta) {
 
 function pick(v) {
   amount.value = Math.min(v, maxAffordable.value);
-}
-
-function openSummary() {
-  if (!canConfirm.value) return;
-  showSummary.value = true;
-}
-
-function confirm() {
-  showSummary.value = false;
-  emit("confirm", amount.value);
 }
 </script>
 
@@ -81,6 +69,16 @@ function confirm() {
          squashed to nothing or painted over, depending on the exact
          margin math for the current viewport width). -->
     <p v-if="message" class="exchange-message">{{ message }}</p>
+    <!-- canStart (already having a ticket banked) makes "เริ่มเกม" skip
+         spending the amount dialed in below entirely (see App.vue's
+         startFromExchange) — without this, a player who still has, say, 1
+         leftover ticket from an earlier session dials in 5 here, presses
+         start, and unknowingly plays a 1-ticket round instead (the 5 never
+         even gets exchanged), with nothing on screen explaining why. -->
+    <p v-if="canStart" class="existing-ticket-note">
+      คุณมีสิทธิเล่นอยู่แล้ว {{ tickets }} สิทธิ กด "เริ่มเกม"
+      เพื่อเล่นด้วยสิทธิที่มีอยู่ก่อน
+    </p>
 
     <div class="point-panel">
       <img class="point-panel-bg" :src="panelBg" alt="" />
@@ -88,9 +86,11 @@ function confirm() {
            balance below can take over this row instead. -->
       <div class="panel-balance-cover"></div>
       <div class="panel-ticket-row">
-        <img class="panel-ticket-label" :src="labelTicketsRemain" alt="" />
-        <span class="panel-ticket-num">{{ tickets }}</span>
-        <img class="panel-ticket-unit" :src="labelTicketsUnit" alt="สิทธิ์" />
+        <img
+          class="panel-ticket-label"
+          :src="labelExchangeAmount"
+          alt="จำนวน Point ที่ต้องการแลก"
+        />
       </div>
 
       <button
@@ -132,33 +132,24 @@ function confirm() {
         (รวมโบนัส +{{ preview.bonus }})
       </p>
 
-      <button
-        class="img-btn confirm-btn"
-        :disabled="!canConfirm || exchanging"
-        @click="openSummary"
-      >
-        <img :src="btnConfirm" alt="ยืนยันแลก" />
-      </button>
-
+      <!-- Single action now: no more separate "ยืนยันแลก" step first —
+           already having tickets plays with those directly, otherwise this
+           spends the amount dialed in above and plays as soon as that
+           resolves (see App.vue's startFromExchange). While that call is in
+           flight, App.vue swaps this whole component out for its own
+           dedicated loading screen (same treatment as the out-of-tickets ->
+           BatchSummary handoff) rather than anything shown here, so this
+           button just needs to stop being clickable in the meantime. -->
       <button
         class="img-btn start-game-btn"
-        :disabled="!canStart || exchanging"
-        @click="emit('start')"
+        :disabled="!canPressStart || exchanging"
+        @click="emit('start', amount)"
       >
         <img
-          :src="canStart ? btnStartGame : btnStartGameDisabled"
-          :alt="canStart ? 'เริ่มเกม' : 'สิทธิ์ไม่เพียงพอ กรุณาแลก Point ก่อน'"
+          :src="canPressStart ? btnStartGame : btnStartGameDisabled"
+          :alt="canPressStart ? 'เริ่มเกม' : 'Point ไม่เพียงพอ'"
         />
       </button>
-
-      <!-- The summary modal closes the instant it's confirmed, well before
-           points/tickets actually update from the exchangeTicket response —
-           without this, the panel just sits there unchanged (looking stuck)
-           until that request resolves. -->
-      <div v-if="exchanging" class="exchanging-overlay">
-        <span class="preloader-spinner"></span>
-        <p class="exchanging-label">กำลังแลกสิทธิ์...</p>
-      </div>
     </div>
     <p v-if="points < RATE" class="rule-note warn">
       Point ไม่พอสำหรับแลกสิทธิ์
@@ -167,34 +158,6 @@ function confirm() {
     <button class="img-btn back-btn" @click="emit('back')">
       <img :src="btnHome" alt="กลับหน้าหลัก" />
     </button>
-
-    <div
-      v-if="showSummary"
-      class="modal-backdrop"
-      @click.self="showSummary = false"
-    >
-      <div class="summary-card">
-        <div class="summary-art">
-          <img class="summary-bg" :src="summaryCard" alt="สรุปการแลกสิทธิ์" />
-          <span class="summary-use">{{ amount }} <small>Point</small></span>
-          <span class="summary-get"
-            >{{ preview.total }} <small>สิทธิ์เล่น</small></span
-          >
-          <span class="summary-remain"
-            >{{ pointsAfter.toLocaleString() }} <small>Point</small></span
-          >
-
-          <div class="summary-actions">
-            <button class="img-btn" @click="showSummary = false">
-              <img :src="btnCancel" alt="ยกเลิก" />
-            </button>
-            <button class="img-btn" @click="confirm">
-              <img :src="btnConfirmSummary" alt="ยืนยันแลก" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   </section>
 </template>
 
@@ -226,7 +189,10 @@ function confirm() {
    how tall the container box is made — growing the aspect-ratio's height
    only changes how far apart everything is spaced, never their alignment to
    the art. The container's aspect-ratio height (980) is set so 100% lands
-   right where the border art + "เริ่มเกม" button actually end. Keep every
+   right where the border art used to end back when there were two stacked
+   buttons ("ยืนยันแลก" + "เริ่มเกม") — now there's only one (see
+   start-game-btn), sitting higher up where the first of those two used to
+   be, so there's more dead card space below it than before. Keep every
    child's percentage in that same ratio to each other if you resize this
    again. */
 .point-panel {
@@ -240,16 +206,14 @@ function confirm() {
      fixed, which starts colliding rows well before the trailing space is
      gone. Trimming the unused space with a negative margin instead leaves
      every child's position untouched and only pulls whatever comes after
-     the panel (the back button) up to ignore it. Ratio matches this panel's
-     own width formula: 96px of dead space at the 366px width this produces
-     on a 390px-wide phone. */
-  margin-bottom: calc(-0.262 * min(400px, 94vw));
+     the panel (the back button) up to ignore it. */
+  margin-bottom: calc(-0.44 * min(400px, 94vw));
 }
 .point-panel-bg {
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 90.5%;
+  height: 78.5%;
   object-fit: fill;
 }
 /* Covers panel.png's own baked "Point คงเหลือ" label + balance number area
@@ -276,21 +240,7 @@ function confirm() {
   gap: 6px;
 }
 .panel-ticket-label {
-  height: 100%;
-  width: auto;
-  display: block;
-}
-.panel-ticket-num {
-  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
-  font-weight: 900;
-  color: #ffd739;
-  font-size: 30px;
-  line-height: 1;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-  font-variant-numeric: tabular-nums;
-}
-.panel-ticket-unit {
-  height: 85%;
+  height: 93%;
   width: auto;
   display: block;
 }
@@ -422,24 +372,21 @@ function confirm() {
   font-size: 11.5px;
   pointer-events: none;
 }
-.confirm-btn {
-  position: absolute;
-  left: 18%;
-  width: 65%;
-  top: 58.75%;
-  margin: 0;
-}
+/* Sits where the old "ยืนยันแลก" button used to (that separate confirm
+   step is gone — see startFromExchange in App.vue), now the panel's only
+   action button. */
 .start-game-btn {
   position: absolute;
   left: 11%;
   width: 78%;
-  top: 70.5%;
+  top: 60%;
   margin: 0;
 }
-/* GS Game (66).png already bakes in the greyed-out button art plus the
-   "สิทธิ์ไม่เพียงพอ" warning line beneath it, so the default disabled
-   treatment (grayscale + dim) would just muddy art that's already designed
-   to read as disabled — keep this button's normal drop-shadow instead. */
+/* btn-start-game-disabled.png already bakes in the greyed-out button art
+   plus the "Point ไม่เพียงพอ" warning line beneath it, so the default
+   disabled treatment (grayscale + dim) would just muddy art that's already
+   designed to read as disabled — keep this button's normal drop-shadow
+   instead. */
 .start-game-btn:disabled img {
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
 }
@@ -451,127 +398,22 @@ function confirm() {
   font-size: 12px;
   line-height: 1.3;
 }
+.existing-ticket-note {
+  width: min(360px, 88vw);
+  margin: 0 0 8px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: rgba(255, 215, 57, 0.12);
+  border: 1px solid rgba(255, 215, 57, 0.4);
+  color: #ffd739;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
 
 .back-btn {
   width: min(300px, 80vw);
   margin-top: 40px;
-}
-
-/* Covers the whole panel (not just the confirm/start buttons) so it's
-   obvious something is happening even on a slow connection, rather than
-   the screen just sitting there identical to before the tap. */
-.exchanging-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: rgba(2, 8, 20, 0.6);
-  border-radius: 20px;
-}
-.exchanging-label {
-  margin: 0;
-  color: #9fd3ff;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: rgba(2, 8, 20, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.summary-card {
-  width: min(420px, 92vw);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.summary-art {
-  position: relative;
-  width: 100%;
-}
-.summary-bg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-/* Percentages measured against the 1040x669 source art (summary-card.png).
-   The baked "Point" / "สิทธิ์เล่น" suffix words were erased too (not just
-   the numbers) so these boxes can span the whole rest of the row — that
-   way a 1-digit or a 3-digit value never crowds into fixed-position baked
-   text, regardless of how wide the number ends up being. */
-.summary-use {
-  position: absolute;
-  left: 48%;
-  width: 46%;
-  top: 23.9%;
-  height: 9%;
-  display: flex;
-  align-items: center;
-  color: #ffd739;
-  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
-  font-weight: 900;
-  font-size: clamp(13px, 3.6vw, 18px);
-}
-.summary-get {
-  position: absolute;
-  left: 52.5%;
-  width: 42%;
-  top: 34.4%;
-  height: 9%;
-  display: flex;
-  align-items: center;
-  color: #ffd739;
-  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
-  font-weight: 900;
-  font-size: clamp(13px, 3.6vw, 18px);
-}
-.summary-remain {
-  position: absolute;
-  left: 56%;
-  width: 38%;
-  top: 44.8%;
-  height: 9%;
-  display: flex;
-  align-items: center;
-  color: #ffd739;
-  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
-  font-weight: 900;
-  font-size: clamp(13px, 3.6vw, 18px);
-  font-variant-numeric: tabular-nums;
-}
-.summary-use small,
-.summary-get small,
-.summary-remain small {
-  color: #eaf6ff;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-weight: 600;
-  margin-left: 5px;
-  font-size: 0.75em;
-}
-/* The card art has a large empty panel below the 3 text rows (before its
-   own bottom border) — the Cancel/Confirm buttons sit inside that space
-   rather than below the card, positioned absolute like the text overlays. */
-.summary-actions {
-  position: absolute;
-  left: 6%;
-  width: 88%;
-  top: 63%;
-  display: flex;
-  gap: 14px;
-}
-.summary-actions .img-btn {
-  flex: 1;
-  min-width: 0;
 }
 </style>
