@@ -1,10 +1,10 @@
 <script setup>
-import titleGsClawEgg from '../assets/ui/common/title-gs-claw-egg.png'
-import btnHome from '../assets/ui/common/btn-home-blue.png'
-import message from '../assets/ui/limit-reached/message.png'
-import eggSad from '../assets/ui/limit-reached/egg-sad.png'
-import pedestal from '../assets/ui/limit-reached/pedestal.png'
-import btnOk from '../assets/ui/limit-reached/btn-ok.png'
+import titleGsClawEgg from '../assets/ui/common/title-gs-claw-egg.webp'
+import btnHome from '../assets/ui/common/btn-home-blue.webp'
+import message from '../assets/ui/limit-reached/message.webp'
+import eggSad from '../assets/ui/limit-reached/egg-sad.webp'
+import pedestal from '../assets/ui/limit-reached/pedestal.webp'
+import btnOk from '../assets/ui/limit-reached/btn-ok.webp'
 
 defineEmits(['go-home'])
 </script>
