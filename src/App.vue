@@ -1,27 +1,26 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
-import eggBlue from "./assets/ui/gameplay/egg-blue.png";
-import eggWhite from "./assets/ui/gameplay/egg-white.png";
-import eggBlack from "./assets/ui/gameplay/egg-black.png";
-import eggSilver from "./assets/ui/gameplay/egg-silver.png";
-import coinPile from "./assets/coin-pile.png";
+import eggBlue from "./assets/ui/gameplay/egg-blue.webp";
+import eggWhite from "./assets/ui/gameplay/egg-white.webp";
+import eggBlack from "./assets/ui/gameplay/egg-black.webp";
+import eggSilver from "./assets/ui/gameplay/egg-silver.webp";
+import coinPile from "./assets/coin-pile.webp";
 import rewardLotus from "./assets/reward-lotus.svg";
 import rewardPtt from "./assets/reward-ptt.svg";
 import rewardHomepod from "./assets/reward-homepod.svg";
-import gsBatteryBadge from "./assets/ui/common/badge.png";
-import hudTopbar from "./assets/ui/common/topbar.png";
-import hexBg from "./assets/ui/common/hex-bg.png";
-import homeTitleFull from "./assets/ui/home/03.png";
-import cabinetHero from "./assets/ui/home/cabinet.png";
-import btnStart from "./assets/ui/home/btn-start.png";
-import navExchangeHistory from "./assets/ui/home/nav-exchange-history.png";
-import navHistory from "./assets/ui/home/nav-history.png";
-import navRewards from "./assets/ui/home/nav-rewards.png";
-import btnHowToPlayWide from "./assets/ui/home/btn-how-to-play-wide.png";
+import gsBatteryBadge from "./assets/ui/common/badge.webp";
+import hudTopbar from "./assets/ui/common/topbar.webp";
+import hexBg from "./assets/ui/common/hex-bg.webp";
+import homeTitleFull from "./assets/ui/home/03.webp";
+import cabinetHero from "./assets/ui/home/cabinet.webp";
+import btnStart from "./assets/ui/home/btn-start.webp";
+import navExchangeHistory from "./assets/ui/home/nav-exchange-history.webp";
+import navHistory from "./assets/ui/home/nav-history.webp";
+import navRewards from "./assets/ui/home/nav-rewards.webp";
+import btnHowToPlayWide from "./assets/ui/home/btn-how-to-play-wide.webp";
 
 import GameMachine from "./components/GameMachine.vue";
-import EggOpening from "./components/EggOpening.vue";
 import RewardResult from "./components/RewardResult.vue";
 import TicketExchange from "./components/TicketExchange.vue";
 import CoinRewards from "./components/CoinRewards.vue";
@@ -30,32 +29,19 @@ import ExchangeHistoryList from "./components/ExchangeHistoryList.vue";
 import BatchSummary from "./components/BatchSummary.vue";
 import HowToPlay from "./components/HowToPlay.vue";
 import LimitReached from "./components/LimitReached.vue";
+import OutOfTicketsPopup from "./components/OutOfTicketsPopup.vue";
 import { useClawDrive } from "./composables/useClawDrive";
 import { clawGameApi, ApiError } from "./lib/api";
 import { initLiff } from "./lib/liff";
 
-const ROUND_TIME = 30; // matches the timer shown in the 08_gameplay / 06_claw_success mockups
-const FRAMES = 4;
-// Matches TicketExchange's max-per-exchange cap (10 tickets + 1 bonus) — the
-// most a single round (or a live adjustment on the play screen) can ever use.
-const MAX_BATCH = 11;
-// How long each egg's own reward stays on screen (see advanceBatch) before
-// the batch moves on to the next egg, or to the summary once it was the
-// last one — long enough to actually read it, short enough that a 10-egg
-// batch doesn't feel like it's stalling.
-const BATCH_REVEAL_PAUSE_MS = 1600;
-// Extra beat on top of that before AUTO starts the *next round* — the
-// reveal pause alone is tuned for "next egg in the same batch", which
-// feels rushed as a gap between two separate tickets.
-const AUTO_ROUND_PAUSE_MS = 1400;
-// Held after the last crack (see tapEgg/autoCrackEgg) just long enough for
-// the "กำลังเปิดไข่..." beat + finalFlash pop to read, before cutting to the
-// reward screen.
-const CRACK_FINISH_PAUSE_MS = 550;
+const ROUND_TIME = 15;
 
-// gameState: idle | exchange | howToPlay | playing | stirring
-//          | grabbing | opening | result | summary | rewards | history
-//          | exchangeHistory
+// gameState: idle | exchange | howToPlay | playing | stirring | grabbing
+//          | result | summary | rewards | history | exchangeHistory
+// A session (from startRound to running out of tickets) stays on
+// playing/stirring/grabbing for every grab it takes — there's no more
+// per-grab reveal screen (see collectedEggs below); "result"/"summary" are
+// only reached once, at the very end of the session.
 // ?dev=1 skips ticket/point cost and the round timer so the claw screen
 // can be reached repeatedly while iterating on its UI.
 const devMode = new URLSearchParams(window.location.search).get("dev") === "1";
@@ -76,12 +62,10 @@ const lineID = ref(null);
 const apiError = ref("");
 const timer = ref(ROUND_TIME);
 const message = ref("");
-// True while confirmExchange's network call is in flight — the summary
-// modal closes the instant it's tapped (see TicketExchange's confirm()),
-// well before points/tickets actually update from the response, so
-// without this the exchange screen just sits there unchanged with no
-// feedback until the request resolves (or, on a slow/dropped request,
-// looks stuck indefinitely).
+// True while exchangeTickets' network call is in flight (see
+// startFromExchange) — without this the exchange screen just sits there
+// unchanged with no feedback until the request resolves (or, on a slow/
+// dropped request, looks stuck indefinitely).
 const exchanging = ref(false);
 const motionEnabled = ref(false);
 const soundOn = ref(true);
@@ -89,51 +73,58 @@ const soundOn = ref(true);
 // shakes (or taps the shake prompt) at least once, per the "shake to stir
 // before you can grab" flow — cleared the moment that first stir resolves.
 const needsStir = ref(true);
-const readyMessage = ref("");
 
 const drive = useClawDrive(50);
 const clawAnim = ref("idle"); // idle|pause|descend|grip|ascend|settle
 const heldEgg = ref(null);
 const targetEggId = ref(null);
-const crackCount = ref(0);
 const reward = ref(null);
-const sceneFlash = ref(false);
 const confetti = ref(false);
-const justCompleted = ref(false);
 const stirTrigger = ref(0);
-// True from the moment egg #2+ of a batch starts auto-grabbing until it
-// finishes cracking — blocks stray taps on the crack screen from racing
-// the simulated ones (see autoCrackEgg) while that egg plays out.
+// True from the moment AUTO starts sliding toward its next egg until that
+// grab's own result has been folded into collectedEggs — blocks the
+// control dock (see controlsEnabled) from fighting AUTO for the claw
+// mid-slide/mid-grab.
 const autoPlaying = ref(false);
-// Toggled by the play screen's AUTO button — while true, every round
-// (first egg included, see autoStartFirstGrab) plays itself out and the
-// next one starts right after, with no shake or grab tap needed, until
-// the player toggles it off, tickets run out, or something goes wrong.
+// Toggled by the play screen's AUTO button — while true, every grab (the
+// session's first egg included) plays itself out and the next one starts
+// right after with no shake or tap needed, until the player toggles it
+// off, tickets run out, or something goes wrong.
 const autoRepeat = ref(false);
 
-const batchSize = ref(1);
-const batchIndex = ref(0);
-const batchRewards = ref([]);
-// How many tickets this batch is actually revealing one-by-one — normally
-// equal to batchSize, set from the real result count once play_claw
-// responds so the rare stock-shortage case (fewer results than tickets
-// spent) still shows the right "egg x/y" progress instead of overshooting.
-const batchTotal = ref(1);
+// Every egg grabbed so far this session (manual or AUTO), in grab order —
+// { id, color, src, reward }. The reward is decided the moment play_claw
+// responds, but stays hidden from the player until the reveal screen (see
+// goToReveal) once the whole session's tickets are spent; GameMachine shows
+// these as a growing tray of unopened icons in the meantime.
+const collectedEggs = ref([]);
+// Shown once a grab leaves the player with 0 tickets — the session is over,
+// so this is the only way forward from the play screen: dismiss it via
+// goToReveal() once resolveSessionBatch (below) has actually finished.
+const outOfTicketsPopup = ref(false);
+// True while the session's one real play_claw call (see resolveSessionBatch)
+// is still in flight. RewardResult's post-crack state uses this directly for
+// its own spinner (that only shows once the player has already cracked the
+// egg open, so a wait there is expected). The popup stays plain the whole
+// time instead — only once the player actually confirms past it does a
+// still-pending batch get its own dedicated loading screen (see goToReveal
+// and gameState 'loadingReveal') rather than blocking the popup itself.
+const sessionBatchLoading = ref(false);
 // Set whenever play_claw reports fully_completed:false (a reward ran out of
-// stock mid-batch) — shown as a note on the result/summary screen so the
-// player understands why they got fewer prizes than tickets spent, instead
-// of it looking like some were silently dropped.
+// stock mid-grab) — shown as a note on the result/summary screen so the
+// player understands why one grab yielded nothing, instead of it looking
+// like it was silently dropped.
 const stockShortageNote = ref("");
-// True once the claw's own grab choreography has finished (egg already
-// visibly gripped) but play_claw's response hasn't come back yet — the
-// network round-trip is fired in parallel with that animation (see
-// grabEgg), but on a slow connection it can easily outlast it, leaving the
-// player looking at a motionless claw with no clue anything is still
-// happening. Drives a spinner + message on the play screen for exactly
-// that gap, cleared in every grabEgg exit path (success or error).
-const awaitingResult = ref(false);
 const historyLog = ref([]);
 const exchangeHistoryLog = ref([]);
+// True while openHistory/openExchangeHistory's own fetch is in flight —
+// without this, the screen would render its empty-state art (still holding
+// whatever was in historyLog/exchangeHistoryLog *before* this fetch, often
+// nothing at all) for however long that request takes, which reads as "you
+// have no history" for a beat before real rows pop in and replace it. A
+// spinner in that same window makes clear a load is actually happening.
+const historyLoading = ref(false);
+const exchangeHistoryLoading = ref(false);
 let historySeq = 0;
 
 let timerId;
@@ -149,19 +140,33 @@ const eggPool = [
   { src: eggBlack, color: "black" },
   { src: eggSilver, color: "silver" },
 ];
+// 4 staggered rows of 5 — y never goes above 66 (any higher risks the claw's
+// own descend reach, measured against Claw.vue's fixed-height rig, and the
+// old 12-egg pile's own topmost row already sat right at that same 66
+// without ever clipping the claw) or below 87 (egg-pile.vue's eggs are 78px
+// tall with a centered anchor, so anything past ~87% of the chamber's own
+// height starts getting clipped by .cabinet-chamber's overflow:hidden).
 const baseEggs = [
-  [13, 73, -9],
-  [23, 68, 6],
-  [36, 68, -4],
-  [45, 70, 5],
-  [61, 68, -7],
-  [73, 68, 7],
-  [82, 66, -4],
-  [17, 82, 5],
-  [36, 82, -7],
-  [50, 82, 2],
-  [66, 82, -3],
-  [83, 83, 8],
+  [13, 66, -6],
+  [30, 66, 5],
+  [47, 66, -3],
+  [64, 66, 7],
+  [81, 66, -8],
+  [21, 72, 4],
+  [38, 72, -7],
+  [54, 72, 6],
+  [70, 72, -4],
+  [85, 72, 8],
+  [13, 79, -5],
+  [30, 79, 7],
+  [47, 79, -6],
+  [64, 79, 4],
+  [81, 79, -3],
+  [21, 85, 6],
+  [38, 85, -8],
+  [54, 85, 5],
+  [70, 85, -4],
+  [85, 85, 7],
 ];
 
 // Colors are shuffled fresh per round (not just a fixed i%4 cycle across
@@ -258,19 +263,10 @@ const controlsEnabled = computed(
     (gameState.value === "playing" || gameState.value === "stirring") &&
     !needsStir.value &&
     // autoGrabNext briefly sets gameState back to "playing" while it slides
-    // the claw over to the next egg (see autoMoveClawTo) — without this,
+    // the claw over to its next egg (see autoMoveClawTo) — without this,
     // that would also flip the arrow/grab buttons back on and let a player
-    // tap fight the auto-slide for control of the claw mid-batch.
+    // tap fight AUTO for control of the claw mid-slide.
     !autoPlaying.value,
-);
-// Only set once a batch (>1 ticket) is actually mid-reveal — drives
-// RewardResult's "egg x/y" caption in place of its usual play-again/home
-// actions, since the app itself advances to the next egg (or the summary)
-// a moment later without any tap needed.
-const batchRevealProgress = computed(() =>
-  batchSize.value > 1
-    ? { current: batchRewards.value.length, total: batchTotal.value }
-    : null,
 );
 
 // Best-effort guess from the reward's name — only ever used as a fallback
@@ -288,6 +284,30 @@ function imageForReward(r) {
 
 const rewardImage = computed(() => reward.value?.image || imageForReward(reward.value));
 
+// Appends a just-grabbed egg to collectedEggs (see grabEgg) — its color is
+// already known (whichever egg the claw actually gripped), pushed in
+// immediately so the tray fills up with zero delay regardless of when the
+// reward itself gets decided. reward starts null and is filled in later,
+// either right away (devMode) or once the session's one batch call
+// resolves on its last grab (see resolveReward/the real-API branch below).
+function pushCollectedEgg(target) {
+  const entry = {
+    id: collectedEggs.value.length + 1,
+    color: target.color,
+    src: target.src,
+    reward: null,
+  };
+  collectedEggs.value.push(entry);
+  return entry;
+}
+
+// Attaches the image fallback the same way pushCollectedEgg used to before
+// its reward was known up front — shared by devMode's immediate reward and
+// the real API's deferred one.
+function resolveReward(r) {
+  return { ...r, image: r.image || imageForReward(r) };
+}
+
 function ticketsForAmount(amount) {
   const base = Math.floor(amount / campaign.value.exchangeRate);
   const bonus = amount >= campaign.value.bonusMinPoint ? campaign.value.bonusQty : 0;
@@ -298,17 +318,16 @@ function delay(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function confirmExchange(amount) {
-  if (amount > points.value || amount < campaign.value.exchangeRate) return;
+// Spends `amount` Points for tickets — no separate confirm step of its own
+// anymore (see startFromExchange, the only caller): it either runs on its
+// own right before a round starts, or not at all.
+async function exchangeTickets(amount) {
+  if (amount > points.value || amount < campaign.value.exchangeRate) return false;
   if (devMode) {
-    const { total, bonus } = ticketsForAmount(amount);
+    const { total } = ticketsForAmount(amount);
     points.value -= amount;
     tickets.value += total;
-    message.value = bonus
-      ? `แลกสำเร็จ! ได้รับ ${total} สิทธิ์ (รวมโบนัส +${bonus})`
-      : `แลกสำเร็จ! ได้รับ ${total} สิทธิ์`;
-    gameState.value = "exchange";
-    return;
+    return true;
   }
   message.value = "";
   exchanging.value = true;
@@ -316,13 +335,10 @@ async function confirmExchange(amount) {
     const data = await clawGameApi.exchangeTicket(lineID.value, amount);
     points.value = data.point;
     tickets.value = data.ticket.balance;
-    const bonus = amount >= campaign.value.bonusMinPoint ? campaign.value.bonusQty : 0;
-    message.value = bonus
-      ? `แลกสำเร็จ! ได้รับ ${data.ticket_gained} สิทธิ์ (รวมโบนัส +${bonus})`
-      : `แลกสำเร็จ! ได้รับ ${data.ticket_gained} สิทธิ์`;
-    gameState.value = "exchange";
+    return true;
   } catch (err) {
-    message.value = err instanceof ApiError ? err.message : "แลกสิทธิ์ไม่สำเร็จ ลองใหม่อีกครั้ง กดยืนยันแลกใหม่อีกครั้ง";
+    message.value = err instanceof ApiError ? err.message : "แลกสิทธิ์ไม่สำเร็จ ลองใหม่อีกครั้ง";
+    return false;
   } finally {
     exchanging.value = false;
   }
@@ -330,7 +346,6 @@ async function confirmExchange(amount) {
 
 function openTicketScreen() {
   if (devMode) {
-    batchSize.value = 1;
     startRound();
     return;
   }
@@ -342,14 +357,17 @@ function openTicketScreen() {
   // tickets to spend.
 }
 
-// The exchange screen's own "เริ่มเกม" button always starts a single round
-// — batch size beyond 1 is chosen live on the play screen itself (see
-// GameMachine's ticket-row stepper / adjustBatchQty), not here.
-function startFromExchange() {
-  if (!canPlayBatch.value) return;
-  batchSize.value = 1;
-  batchIndex.value = 0;
-  batchRewards.value = [];
+// The exchange screen's own "เริ่มเกม" button starts a whole session that
+// then keeps grabbing (see grabEgg) until every ticket is spent. Already
+// having playable tickets always wins (never spends Points the player
+// didn't ask to spend just because some amount happens to be selected on
+// the stepper) — only exchanges the selected `amount` first when there's
+// nothing left to play with yet, per the amount the player left dialed in.
+async function startFromExchange(amount) {
+  if (!canPlayBatch.value) {
+    const ok = await exchangeTickets(amount);
+    if (!ok) return;
+  }
   startRound();
 }
 
@@ -380,6 +398,10 @@ async function redeemCoinReward(item) {
   }
 }
 
+// Starts a whole session: from here, grabEgg's own continuation keeps the
+// player on the play screen grabbing (manual or AUTO) — resetting the timer
+// to ROUND_TIME after every successful grab — until tickets run out, with no
+// need to call this again in between (see the out-of-tickets popup instead).
 function startRound() {
   if (!devMode && tickets.value < 1) {
     goHome();
@@ -391,36 +413,25 @@ function startRound() {
   // grabEgg() via play_claw, which is the single source of truth for the
   // balance afterward. Not touching `tickets` here keeps it accurate even
   // if the player backs out before actually grabbing.
-  batchIndex.value++;
   eggs.value = makeEggs();
   drive.setX(50);
   clawAnim.value = "idle";
   heldEgg.value = null;
   targetEggId.value = null;
-  crackCount.value = 0;
-  justCompleted.value = false;
   autoPlaying.value = false;
-  awaitingResult.value = false;
   reward.value = null;
-  // advanceBatch indexes pendingResults by batchRewards.value.length — the
-  // manual "play again" paths already reset this themselves before calling
-  // startRound(), but AUTO's own repeat loop (startNextAutoRound) calls
-  // straight into startRound() with last round's rewards still sitting
-  // here. Left stale, the very next round's single result lands at index 1
-  // instead of 0 (out of bounds -> undefined), and mapResult(undefined)
-  // throws, freezing the crack screen right after the last tap since
-  // nothing catches it. Resetting here once covers every entry point.
-  batchRewards.value = [];
+  collectedEggs.value = [];
+  outOfTicketsPopup.value = false;
+  sessionBatchLoading.value = false;
   stockShortageNote.value = "";
-  sceneFlash.value = false;
   timer.value = ROUND_TIME;
   gameState.value = "playing";
   // AUTO (see toggleAutoRepeat) skips the shake gate entirely — a mode
   // that's supposed to run hands-off until the player turns it off
-  // shouldn't still make them shake first every single round.
+  // shouldn't still make them shake first every single session. Manual play
+  // only ever shakes once here too — every later grab this session just
+  // resets the timer (see grabEgg), never needsStir.
   needsStir.value = !autoRepeat.value;
-  readyMessage.value =
-    batchSize.value > 1 ? `รอบ ${batchIndex.value}/${batchSize.value}` : "";
   // Left blank: the shake-pill's own artwork already carries the
   // "shake before you start" instruction while the gate is up.
   message.value = "";
@@ -432,38 +443,23 @@ function startRound() {
   // is still there as the fallback for those.
   if (!motionEnabled.value) enableMotion();
 
-  if (autoRepeat.value) autoStartFirstGrab();
+  if (autoRepeat.value) autoGrabNext();
 }
 
-// Lets the player fine-tune how many eggs this round will open directly on
-// the play screen (before grabbing) — the exchange screen's "เริ่มเกม"
-// always starts at 1, so this is the only place batch size goes up.
-// `tickets` is the real (unspent) balance the whole time — nothing is
-// reserved locally, so this only has to clamp the on-screen choice.
 // Wired to the play screen's AUTO toggle. Turning it off just stops the
-// *next* round from starting (every in-flight auto step already checks
-// autoRepeat before continuing — see advanceBatch/startNextAutoRound); the
-// current egg still finishes playing out rather than cutting off mid-
-// animation. Turning it on mid-round, before that round's own grab has
-// happened yet, takes over right away instead of leaving the player to
-// still shake/tap first.
+// *next* grab from auto-starting (grabEgg's own continuation already checks
+// autoRepeat before chaining into another — see autoGrabNext); the current
+// grab still finishes playing out rather than cutting off mid-animation.
+// Turning it on mid-session, before the next grab has happened yet, takes
+// over right away instead of leaving the player to still shake/tap first.
 function toggleAutoRepeat() {
   autoRepeat.value = !autoRepeat.value;
   if (!autoRepeat.value) return;
 
   if (["playing", "stirring"].includes(gameState.value) && !autoPlaying.value) {
     needsStir.value = false;
-    autoStartFirstGrab();
+    autoGrabNext();
   }
-}
-
-function adjustBatchQty(nextQty) {
-  if (!["playing", "stirring"].includes(gameState.value)) return;
-  const maxTotal = Math.min(MAX_BATCH, tickets.value);
-  const clamped = Math.max(1, Math.min(nextQty, maxTotal));
-  if (clamped === batchSize.value) return;
-  batchSize.value = clamped;
-  message.value = "";
 }
 
 function startRoundTimer() {
@@ -472,7 +468,7 @@ function startRoundTimer() {
     timer.value--;
     if (timer.value <= 0) {
       stopTimer();
-      grabEgg(true);
+      grabEgg();
     }
   }, 1000);
 }
@@ -512,17 +508,22 @@ function stirEggs() {
     if (gameState.value === "stirring") gameState.value = "playing";
     if (wasGated) {
       needsStir.value = false;
-      message.value = readyMessage.value;
+      message.value = "";
       startRoundTimer();
     }
   });
 }
 
-// Holds whatever play_claw returned for the round currently in progress,
-// consumed by advanceBatch one egg at a time as each one finishes
-// cracking — every reward in the batch is decided here (grab-time), just
-// not shown yet.
-let pendingResults = [];
+// Everything about this feels like "one ticket, one grab" from the player's
+// side, but the real API call is only ever made ONCE per session, right on
+// the very last grab, for every ticket spent this session at once (see
+// grabEgg) — the dev backend can take 6-12s to answer even a trivial
+// request, so every grab before the last one is purely local (claw
+// animation only, no network wait at all): its color is already known from
+// which egg was actually grabbed, so it's pushed into collectedEggs right
+// away with reward left null. The one real wait lands on the last grab,
+// right at the natural "done collecting, about to see what's inside"
+// boundary, instead of interrupting the pile-up after every single tap.
 
 function mapResult(r) {
   return {
@@ -567,12 +568,12 @@ function settleNearbyEggs(removedEgg) {
 async function playGrabAnimation(token, target) {
   clawAnim.value = "pause";
   beep(220, 0.05);
-  await delay(90);
+  await delay(160);
   if (token !== transitionToken) return false;
 
   clawAnim.value = "descend";
   beep(180, 0.08);
-  await delay(380);
+  await delay(620);
   if (token !== transitionToken) return false;
 
   target.hidden = true;
@@ -580,22 +581,26 @@ async function playGrabAnimation(token, target) {
   heldEgg.value = target;
   clawAnim.value = "grip";
   beep(420, 0.07);
-  await delay(160);
+  await delay(260);
   if (token !== transitionToken) return false;
 
   clawAnim.value = "ascend";
-  await delay(380);
+  await delay(620);
   if (token !== transitionToken) return false;
 
   clawAnim.value = "settle";
-  await delay(140);
+  await delay(230);
   return token === transitionToken;
 }
 
-// autoAdvance: true only when AUTO's own autoStartFirstGrab is driving
-// this — the crack that follows plays itself out (autoCrackEgg) instead
-// of waiting on taps, same as egg #2+ of a batch already does.
-async function grabEgg(auto = false, autoAdvance = false) {
+// The whole grab: claw choreography, always local and instant, plus —
+// only on the session's last ticket — the one real play_claw round-trip
+// that decides every grab made so far at once (see isLastGrabOfSession).
+// Folds the result(s) into collectedEggs, then either resets the timer for
+// the next grab or, once tickets hit 0, pops the "out of tickets" popup.
+// Called the same way whether the player tapped grab, the round timer ran
+// out, or AUTO chained into it (see autoGrabNext).
+async function grabEgg() {
   if (!["playing", "stirring"].includes(gameState.value)) return;
   stopTimer();
   const token = ++transitionToken;
@@ -612,53 +617,95 @@ async function grabEgg(auto = false, autoAdvance = false) {
   // browser, which could otherwise leave the drive's direction stuck non-
   // zero forever. Force it to a clean stop right here regardless.
   drive.release();
-  message.value = auto ? "หมดเวลา ระบบกำลังคีบให้อัตโนมัติ" : "";
-  // Assumed equal to batchSize until the real response (if any) comes back
-  // and refines it — see the stock-shortage note below.
-  batchTotal.value = batchSize.value;
+  message.value = "";
 
-  // Fire the real play the moment the grab is committed, so the network
-  // round-trip overlaps the descend/grip/ascend animation below instead of
-  // adding its own wait after the crack finishes. Only awaited just before
-  // we actually need the results. One call resolves every ticket in this
-  // batch at once — egg #2 onward (see autoGrabNext) just replays the
-  // grab/crack choreography per egg against results already in hand, no
-  // repeat network round-trip needed.
-  const playPromise = devMode ? null : clawGameApi.playClaw(lineID.value, batchSize.value);
+  // The last ticket in a session still only gets spent for real (i.e. the
+  // reward decided) once the last grab's fetch resolves (see below) — but
+  // the ticket COUNT itself decrements locally right away same as any other
+  // grab, so "สิทธิ์คงเหลือ" reads 0 the instant this grab plays out instead
+  // of sitting on the pre-grab number for however long that fetch takes
+  // (this backend has measured 10-20s+ response times). resolveSessionBatch
+  // still overwrites this with the server's own number once it answers, so
+  // a stock-shortage or other mismatch self-corrects either way.
+  const isLastGrabOfSession = !devMode && tickets.value <= 1;
 
   try {
     const ok = await playGrabAnimation(token, target);
     if (!ok) return;
 
-    if (!devMode) {
-      // The animation is done (egg visibly gripped) but the network call
-      // fired back at the top of this function may well still be in
-      // flight — show that explicitly rather than leaving the claw just
-      // sitting there with no explanation.
-      awaitingResult.value = true;
-      message.value = "กำลังเปิดไข่...";
-      const data = await playPromise;
-      awaitingResult.value = false;
-      pendingResults = data.results;
-      batchTotal.value = data.results.length;
-      tickets.value = data.ticket.balance;
-      coins.value = data.coin;
-      stockShortageNote.value =
-        data.fully_completed === false
-          ? `ได้รับ ${data.results.length} จาก ${batchSize.value} รางวัลที่ใช้สิทธิ์ไป (ของรางวัลบางส่วนหมดสต็อกระหว่างคีบ)`
-          : "";
+    // The color is already decided by which egg the claw actually gripped
+    // — push it into the tray immediately regardless of whether this grab
+    // is the one that has to wait on the network; the reward itself stays
+    // null (hidden) until it's known.
+    const entry = pushCollectedEgg(target);
+
+    if (devMode) {
+      // ?dev=1 skips ticket/point cost entirely (see the top-of-file note)
+      // — tickets never move here, so a dev session can be mashed
+      // indefinitely while tuning the claw/animation without ever hitting
+      // the out-of-tickets popup below.
+      const r = drawReward();
+      entry.reward = resolveReward(r);
+      if (r.type === "coin") coins.value += r.value;
+      logReward(r);
+    } else {
+      tickets.value -= 1;
+    }
+    // isLastGrabOfSession (real API): reward resolution is deferred to
+    // resolveSessionBatch below, fired only once the player has already
+    // landed on whichever screen is coming next — nothing left to decide
+    // for this branch here.
+
+    // The pile can run dry well before tickets do (see the plan's pile-
+    // depletion note) — refill it right here so the next grab always has
+    // something live to target instead of stranding the session.
+    if (eggs.value.every((e) => e.hidden)) eggs.value = makeEggs();
+
+    // Straight back to idle with no pause or flash in between — this used
+    // to mirror the old crack-screen transition's own flash beat, but
+    // that was tuned for a screen swap that no longer happens here; with
+    // grabs now chaining back-to-back on the same play screen, a bright
+    // full-screen flash on every single one (see .game-phone.flash in
+    // style.css) read as the screen flickering/going dark by contrast each
+    // time it snapped back, not as a smooth continuous session.
+    clawAnim.value = "idle";
+    heldEgg.value = null;
+    targetEggId.value = null;
+    autoPlaying.value = false;
+
+    gameState.value = "playing";
+
+    if (isLastGrabOfSession) {
+      // Head straight to whichever reveal screen is coming next — a single
+      // egg lands on RewardResult (still closed; cracking it doesn't need
+      // the reward, only *revealing* it does), 2+ land on the popup. Either
+      // way resolveSessionBatch's one real network call now runs behind
+      // that screen instead of in front of it.
+      if (collectedEggs.value.length === 1) {
+        gameState.value = "result";
+      } else {
+        outOfTicketsPopup.value = true;
+      }
+      resolveSessionBatch(token);
+      return;
     }
 
-    proceedToOpening(token, autoAdvance);
+    timer.value = ROUND_TIME;
+    message.value = "";
+    if (autoRepeat.value) {
+      autoGrabNext();
+    } else {
+      startRoundTimer();
+    }
   } catch (err) {
     // Whatever went wrong, never leave the player stuck on a dead
     // 'grabbing' screen with no controls and no way forward.
     console.error("grabEgg failed, recovering to playing", err);
-    awaitingResult.value = false;
     if (token === transitionToken) {
       // Don't keep spending tickets in a loop against whatever's actually
       // wrong — stop AUTO here and let the player see the error themselves.
       autoRepeat.value = false;
+      autoPlaying.value = false;
       target.hidden = false;
       heldEgg.value = null;
       clawAnim.value = "idle";
@@ -669,11 +716,84 @@ async function grabEgg(auto = false, autoAdvance = false) {
   }
 }
 
-// Egg #2 onward in a batch (n > 1): the first egg is the player's own grab
-// (see grabEgg); every ticket's reward already came back from that same
-// play_claw call (pendingResults), so the rest of the batch just replays
-// the grab + crack choreography per egg — purely visual, no further API
-// calls or player input — until every ticket's been shown.
+// The session's one real play_claw call, fired only once the player has
+// already landed on the reveal screen (RewardResult or the popup) instead
+// of before it — see grabEgg's isLastGrabOfSession branch. Resolves every
+// still-pending placeholder in collectedEggs at once; sessionBatchLoading
+// drives a spinner on whichever screen is currently showing in the
+// meantime, and each individual reward pops in as soon as this resolves
+// even if the player hasn't cracked that particular egg open yet.
+async function resolveSessionBatch(token) {
+  const pending = collectedEggs.value.filter((e) => e.reward === null);
+  sessionBatchLoading.value = true;
+  try {
+    const data = await clawGameApi.playClaw(lineID.value, pending.length);
+    if (token !== transitionToken) return;
+    const results = data.results.map(mapResult);
+    pending.forEach((e, i) => {
+      e.reward = results[i] ? resolveReward(results[i]) : null;
+    });
+    // Any placeholder that still has no reward ran into the rare stock-
+    // shortage case (fewer results came back than pending tickets) —
+    // nothing to show for that grab, so drop it rather than leave a
+    // permanently-closed egg in the tray.
+    collectedEggs.value = collectedEggs.value.filter((e) => e.reward);
+    tickets.value = data.ticket.balance;
+    coins.value = data.coin;
+    stockShortageNote.value =
+      data.fully_completed === false
+        ? `ได้รับ ${data.results.length} จาก ${pending.length} รางวัลที่ใช้สิทธิ์ไป (ของรางวัลบางส่วนหมดสต็อกระหว่างคีบ)`
+        : "";
+    if (gameState.value === "result") {
+      reward.value = collectedEggs.value[0]?.reward ?? null;
+    } else if (gameState.value === "loadingReveal") {
+      // The player already confirmed past the popup and has been waiting
+      // on this — hand off to BatchSummary now that it's actually ready.
+      gameState.value = "summary";
+    }
+  } catch (err) {
+    console.error("resolveSessionBatch failed", err);
+    // Never leave the player stuck staring at eggs that will never resolve
+    // (RewardResult/BatchSummary both gate their own actions behind a
+    // reward actually being there) — drop whatever's still pending, same
+    // treatment as a stock shortage, so this screen's own action becomes
+    // reachable again.
+    collectedEggs.value = collectedEggs.value.filter((e) => e.reward);
+    const errMessage = err instanceof ApiError ? err.message : "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง";
+    // This call is the whole session's one real spend (see grabEgg's
+    // isLastGrabOfSession) — tickets/coin only ever moved locally as an
+    // optimistic guess up to this point, so without this they'd stay frozen
+    // at their last pre-spend value (e.g. the popup still showing "1 ticket
+    // left" forever) whether or not the spend actually went through
+    // server-side. Ask the server directly instead of guessing either way.
+    try {
+      const state = await clawGameApi.getGameState(lineID.value);
+      tickets.value = state.ticket.balance;
+      coins.value = state.coin;
+    } catch {
+      /* best effort only — leave the optimistic local values if even this fails */
+    }
+    if (gameState.value === "result" && !reward.value) {
+      // The lone egg itself never resolved — nothing left to show here.
+      goHome();
+      message.value = errMessage;
+    } else if (gameState.value === "loadingReveal") {
+      if (collectedEggs.value.length) {
+        stockShortageNote.value = errMessage;
+        gameState.value = "summary";
+      } else {
+        // Every pending egg got filtered out above — nothing left to show.
+        goHome();
+        message.value = errMessage;
+      }
+    } else {
+      stockShortageNote.value = errMessage;
+    }
+  } finally {
+    if (token === transitionToken) sessionBatchLoading.value = false;
+  }
+}
+
 // Slides the claw over to targetX using the same accelerate/decelerate
 // motion as the player's own arrow buttons (see useClawDrive), rather than
 // snapping straight there — so an auto-grabbed egg looks like the claw
@@ -706,10 +826,9 @@ async function autoMoveClawTo(targetX, token) {
   return token === transitionToken;
 }
 
-// Shared by autoGrabNext (rest of a batch) and autoStartFirstGrab (a whole
-// round auto-played via the AUTO toggle). Rolls a random zone (left/centre/
-// right of the chamber) first, then grabs whichever live egg sits closest
-// to it — picking uniformly among whatever's left in the pile could,
+// Called by autoGrabNext before every AUTO grab. Rolls a random zone
+// (left/centre/right of the chamber) first, then grabs whichever live egg
+// sits closest to it — picking uniformly among whatever's left in the pile could,
 // purely by chance, land near the same spot several eggs in a row; rolling
 // the zone up front guarantees the claw's travel actually varies each time.
 // A plain uniform pick among the 3 zones is *technically* random but still
@@ -728,18 +847,19 @@ function pickAutoTarget(liveEggs) {
   )[0];
 }
 
+// Slides the claw to a target the same way a session's every AUTO grab
+// does, then hands off to the ordinary grabEgg(): it picks "whichever live
+// egg is closest to drive.x", which by now is the egg we just parked on, so
+// every AUTO grab — first or fiftieth — rides the exact same spend/API/
+// animation path a manual grab takes rather than duplicating it. Called
+// once to kick AUTO off (from startRound/toggleAutoRepeat) and again by
+// grabEgg's own continuation for as long as AUTO and tickets both hold.
 async function autoGrabNext() {
   const token = ++transitionToken;
   autoPlaying.value = true;
   const live = eggs.value.filter((e) => !e.hidden);
-  const eggNum = batchRewards.value.length + 1;
   if (!live.length) {
-    // Shouldn't happen (12 egg slots vs. MAX_BATCH 11) but never strand the
-    // player on a dead scene if it somehow does.
-    console.error("autoGrabNext: no eggs left in pile, finishing batch early");
     autoPlaying.value = false;
-    gameState.value = "summary";
-    celebrate();
     return;
   }
   const target = pickAutoTarget(live);
@@ -748,122 +868,23 @@ async function autoGrabNext() {
     // Stay on "playing" (claw idle, just sliding) while lining up over the
     // egg — controlsEnabled already blocks real arrow/grab taps for the
     // whole autoPlaying span, so this doesn't hand control back to the
-    // player mid-batch.
+    // player mid-slide.
     gameState.value = "playing";
     clawAnim.value = "idle";
-    message.value = `ระบบกำลังเลื่อนตัวคีบไปยังไข่ฟองที่ ${eggNum}/${batchSize.value}...`;
     const arrived = await autoMoveClawTo(target.x, token);
     if (!arrived) return;
 
-    targetEggId.value = target.id;
-    gameState.value = "grabbing";
-    message.value = `ระบบกำลังคีบไข่ฟองที่ ${eggNum}/${batchSize.value} ให้อัตโนมัติ...`;
-
-    const ok = await playGrabAnimation(token, target);
-    if (!ok) return;
-    await proceedToOpening(token, true);
+    await grabEgg();
   } catch (err) {
-    console.error("autoGrabNext failed, closing out the batch with what we have", err);
+    console.error("autoGrabNext failed, stopping AUTO", err);
     if (token === transitionToken) {
       drive.release();
       autoPlaying.value = false;
-      gameState.value = "summary";
-      celebrate();
+      autoRepeat.value = false;
+      gameState.value = "playing";
+      message.value = "เกิดข้อผิดพลาด ลองคีบใหม่อีกครั้ง";
     }
   }
-}
-
-// Kicks off a round's own first egg when AUTO (see toggleAutoRepeat) is on
-// — startRound() already skipped the shake gate, so nothing else is
-// waiting on the player here. Slides the claw to a target the same way
-// autoGrabNext does, then hands off to the ordinary grabEgg(): it picks
-// "whichever live egg is closest to drive.x", which by now is the egg we
-// just parked on, so this rides the exact same spend/API/animation path a
-// manual grab takes rather than duplicating it.
-async function autoStartFirstGrab() {
-  const token = ++transitionToken;
-  autoPlaying.value = true;
-  const live = eggs.value.filter((e) => !e.hidden);
-  if (!live.length) {
-    autoPlaying.value = false;
-    return;
-  }
-  const target = pickAutoTarget(live);
-
-  gameState.value = "playing";
-  clawAnim.value = "idle";
-  message.value = "ระบบกำลังคีบให้อัตโนมัติ...";
-  const arrived = await autoMoveClawTo(target.x, token);
-  if (!arrived || token !== transitionToken) return;
-
-  await grabEgg(false, true);
-}
-
-// autoAdvance: true for egg #2+ of a batch (see autoGrabNext) — the crack
-// itself plays out on its own (autoCrackEgg) instead of waiting on taps.
-async function proceedToOpening(token, autoAdvance = false) {
-  if (token !== transitionToken) return;
-  sceneFlash.value = true;
-  await delay(180);
-  if (token !== transitionToken) return;
-
-  gameState.value = "opening";
-  sceneFlash.value = false;
-  clawAnim.value = "idle";
-  crackCount.value = 0;
-  justCompleted.value = false;
-
-  if (autoAdvance) {
-    await autoCrackEgg(token);
-    return;
-  }
-  message.value =
-    batchSize.value > 1
-      ? `แตะที่ไข่ย้ำ ๆ ให้แตกครบ ${FRAMES} ครั้ง เพื่อเปิดฟองแรก อีก ${batchSize.value - 1} ฟองที่เหลือระบบจะคีบและเปิดให้อัตโนมัติ`
-      : `แตะที่ไข่ย้ำ ๆ ให้แตกครบ ${FRAMES} ครั้ง`;
-}
-
-async function tapEgg() {
-  if (
-    gameState.value !== "opening" ||
-    crackCount.value >= FRAMES ||
-    autoPlaying.value
-  )
-    return;
-  crackCount.value += 1;
-  beep(320 + crackCount.value * 35, 0.035);
-  if (navigator.vibrate) navigator.vibrate(18);
-  if (crackCount.value >= FRAMES) {
-    const token = transitionToken;
-    justCompleted.value = true;
-    message.value = "กำลังเปิดไข่...";
-    beep(760, 0.1);
-    await delay(CRACK_FINISH_PAUSE_MS);
-    if (token !== transitionToken) return;
-    // justCompleted resets on the next round's setup, not here — this
-    // screen is about to be replaced, so reverting it now just snaps the
-    // egg back to fully visible for a frame before the transition covers it.
-    advanceBatch();
-  }
-}
-
-// Simulates the same taps tapEgg() takes from the player, at a steady
-// pace, for every egg after the first in a batch — autoPlaying (set by
-// autoGrabNext) keeps a stray real tap from racing these.
-async function autoCrackEgg(token) {
-  message.value = "ระบบกำลังเปิดไข่ให้อัตโนมัติ...";
-  for (let i = 0; i < FRAMES; i++) {
-    await delay(340);
-    if (token !== transitionToken) return;
-    crackCount.value += 1;
-    beep(320 + crackCount.value * 35, 0.035);
-  }
-  justCompleted.value = true;
-  message.value = "กำลังเปิดไข่...";
-  beep(760, 0.1);
-  await delay(CRACK_FINISH_PAUSE_MS);
-  if (token !== transitionToken) return;
-  advanceBatch();
 }
 
 function logReward(r, kind = "grab") {
@@ -889,85 +910,6 @@ function celebrate() {
   }, 1600);
 }
 
-// Called once per egg's crack completing, whether that egg was the
-// player's own (tapEgg) or an auto-played one (autoCrackEgg). Reveals
-// that egg's already-known reward, then either sends the claw after the
-// next egg in the batch or, once every ticket's been shown, wraps the
-// round up.
-// Called once per egg's crack completing, whether that egg was the
-// player's own (tapEgg) or an auto-played one (autoCrackEgg). Every egg —
-// including the last one in a batch — gets its own reward reveal; a
-// batch just auto-advances off of that reveal a beat later (to the next
-// egg, or to the summary once it was the last one) instead of waiting on
-// a tap the way a single play does.
-function advanceBatch() {
-  let r;
-  if (devMode) {
-    r = drawReward();
-    if (r.type === "coin") coins.value += r.value;
-    logReward(r);
-  } else {
-    r = mapResult(pendingResults[batchRewards.value.length]);
-  }
-
-  reward.value = r;
-  batchRewards.value.push(r);
-  autoPlaying.value = false;
-  gameState.value = "result";
-  celebrate();
-
-  if (batchSize.value === 1) {
-    if (autoRepeat.value) startNextAutoRound();
-    return;
-  }
-
-  const token = transitionToken;
-  const isLastEgg = batchRewards.value.length >= batchTotal.value;
-  setTimeout(() => {
-    if (token !== transitionToken) return;
-    if (isLastEgg) {
-      gameState.value = "summary";
-      celebrate();
-      if (autoRepeat.value) startNextAutoRound();
-    } else {
-      autoGrabNext();
-    }
-  }, BATCH_REVEAL_PAUSE_MS);
-}
-
-// AUTO (see toggleAutoRepeat): once a round's very last reveal has had its
-// moment on screen, wait one more beat — this pause is tuned for "between
-// two separate tickets", a bit more breathing room than the one between
-// eggs of the same batch — then start the next round, unless the player
-// switched AUTO off (or navigated away entirely) during that wait.
-function startNextAutoRound() {
-  const token = transitionToken;
-  setTimeout(() => {
-    if (token !== transitionToken || !autoRepeat.value) return;
-    // Out of tickets: startRound() would otherwise call goHome() right out
-    // from under whatever reward/summary screen the player is currently
-    // looking at, bouncing them back to the home screen a beat after AUTO's
-    // very last reward appears with no action on their part. Stop the loop
-    // here instead and just leave that screen up — same as running out
-    // mid-AUTO always should have felt, they can back out (or exchange for
-    // more) themselves whenever they're done looking.
-    if (!devMode && tickets.value < 1) {
-      autoRepeat.value = false;
-      return;
-    }
-    // The manual "play again" paths (playAgain/playMoreFromSummary) reset
-    // batchSize to 1 before every fresh round, so this never comes up for
-    // them — but AUTO keeps reusing whatever batch size was already
-    // selected, and tickets only ever go down round to round. Without this
-    // clamp, a later round could ask play_claw for more tickets than are
-    // actually left.
-    if (!devMode) {
-      batchSize.value = Math.max(1, Math.min(batchSize.value, tickets.value));
-    }
-    startRound();
-  }, AUTO_ROUND_PAUSE_MS);
-}
-
 function drawReward() {
   const total = DEV_REWARDS.reduce((s, r) => s + r.weight, 0);
   let n = Math.random() * total;
@@ -978,26 +920,33 @@ function drawReward() {
   return DEV_REWARDS.at(-1);
 }
 
-function playAgain() {
-  if (!devMode && !canPlayBatch.value) {
+// Confirms past the out-of-tickets popup — the popup only ever shows for
+// the 2+ egg case (see grabEgg), a single egg lands straight on RewardResult
+// without it. If resolveSessionBatch's one real call is still in flight at
+// this point, don't dump the player straight onto BatchSummary with nothing
+// to show yet — hold on a dedicated 'loadingReveal' screen (just a spinner
+// + label) until it resolves, then resolveSessionBatch itself hands off to
+// 'summary' (see its own gameState check). If it's already resolved by the
+// time the player confirms, skip that screen entirely. Neither reveal
+// screen celebrates on arrival — every egg is still sealed at that point,
+// so celebrate() only ever fires from a CrackableEgg's own @open.
+function goToReveal() {
+  outOfTicketsPopup.value = false;
+  if (!collectedEggs.value.length) {
+    // Nothing survived resolveSessionBatch (see its error-path filtering) —
+    // there'd be nothing to show on BatchSummary.
     goHome();
     return;
   }
-  batchSize.value = 1;
-  batchIndex.value = 0;
-  batchRewards.value = [];
-  startRound();
+  gameState.value = sessionBatchLoading.value ? "loadingReveal" : "summary";
 }
 
-function playMoreFromSummary() {
-  if (!canPlayBatch.value) {
-    goHome();
-    return;
-  }
-  batchSize.value = 1;
-  batchIndex.value = 0;
-  batchRewards.value = [];
-  startRound();
+// Each tap of a CrackableEgg's crack interaction — shared by RewardResult's
+// single egg and every card in BatchSummary's list — same escalating-pitch
+// beep + haptic buzz the old dedicated crack screen used per tap.
+function onEggCrack(n) {
+  beep(320 + n * 35, 0.035);
+  if (navigator.vibrate) navigator.vibrate(18);
 }
 
 function goHome() {
@@ -1006,14 +955,15 @@ function goHome() {
   drive.stop();
   gameState.value = "idle";
   message.value = "";
+  outOfTicketsPopup.value = false;
   // Bumping transitionToken alone stops a mid-flight auto-grab chain (see
-  // autoGrabNext/autoCrackEgg) at its next await checkpoint, but every one
-  // of those checkpoints just returns early without clearing this — reset
-  // it here so a fresh round never starts with the first egg's own tap
-  // wrongly blocked by a leftover autoPlaying flag from the last one.
+  // autoGrabNext) at its next await checkpoint, but every one of those
+  // checkpoints just returns early without clearing this — reset it here
+  // so a fresh session never starts with its first grab wrongly blocked by
+  // a leftover autoPlaying flag from the last one.
   autoPlaying.value = false;
   // Leaving the play screen has to actually stop AUTO, not just the current
-  // round — otherwise a player backing out mid-cycle would come back to
+  // session — otherwise a player backing out mid-cycle would come back to
   // find the button still on (or worse, would rely on transitionToken
   // alone and never quite trust it stopped spending tickets on its own).
   autoRepeat.value = false;
@@ -1061,17 +1011,28 @@ function markPendingBatchResolved(ticketId) {
   }
 }
 
-// Best-effort recovery for a batch left mid-play by an interrupted session
-// (network drop, tab closed mid-grab) — there's no claw/crack animation to
-// replay here, so just resolve it server-side and land straight on the
-// reveal screen with whatever it decided.
+// Best-effort recovery for a grab left mid-play by an interrupted session
+// (network drop, tab closed mid-grab) — there's no claw animation to replay
+// here, so just resolve it server-side and land straight on the reveal
+// screen with whatever it decided. The color the player actually grabbed
+// isn't recoverable (that only ever lived in the client state lost with the
+// interrupted tab), so these fall back to the blue icon — same fallback
+// used elsewhere (see heldEggColor) whenever a held egg's real color isn't
+// known.
 async function resumePendingBatch(ticketId, requestedTotal) {
   const data = await clawGameApi.playClaw(lineID.value);
   tickets.value = data.ticket.balance;
   coins.value = data.coin;
   markPendingBatchResolved(ticketId);
-  batchRewards.value = data.results.map(mapResult);
-  batchSize.value = batchRewards.value.length;
+  collectedEggs.value = data.results.map((r) => {
+    const mapped = mapResult(r);
+    return {
+      id: collectedEggs.value.length + 1,
+      color: "blue",
+      src: eggBlue,
+      reward: { ...mapped, image: mapped.image || imageForReward(mapped) },
+    };
+  });
   stockShortageNote.value =
     data.fully_completed === false
       ? `ได้รับ ${data.results.length} จาก ${requestedTotal ?? "?"} รางวัลที่ใช้สิทธิ์ไป (ของรางวัลบางส่วนหมดสต็อกระหว่างคีบ)`
@@ -1079,11 +1040,11 @@ async function resumePendingBatch(ticketId, requestedTotal) {
   // A batch already settled server-side (e.g. an earlier resume that
   // partially failed after paying out) can legitimately come back empty —
   // nothing left to show, so just stay on whatever screen we're already on.
-  if (batchSize.value === 0) return;
-  if (batchSize.value > 1) {
+  if (collectedEggs.value.length === 0) return;
+  if (collectedEggs.value.length > 1) {
     gameState.value = "summary";
   } else {
-    reward.value = batchRewards.value[0];
+    reward.value = collectedEggs.value[0].reward;
     gameState.value = "result";
   }
 }
@@ -1113,11 +1074,14 @@ function mapHistoryRow(row, i) {
 async function openHistory() {
   gameState.value = "history";
   if (devMode) return;
+  historyLoading.value = true;
   try {
     const rows = await clawGameApi.getPlayHistory(lineID.value);
     historyLog.value = rows.map((r, i) => mapHistoryRow(r, i)).sort((a, b) => b.ts - a.ts);
   } catch (err) {
     message.value = err instanceof ApiError ? err.message : "โหลดประวัติไม่สำเร็จ";
+  } finally {
+    historyLoading.value = false;
   }
 }
 
@@ -1141,11 +1105,14 @@ async function openExchangeHistory() {
   // In dev mode, redeemCoinReward already pushes straight into
   // exchangeHistoryLog — nothing to fetch.
   if (devMode) return;
+  exchangeHistoryLoading.value = true;
   try {
     const rows = await clawGameApi.getRedeemHistory(lineID.value);
     exchangeHistoryLog.value = rows.map(mapExchangeRow);
   } catch (err) {
     message.value = err instanceof ApiError ? err.message : "โหลดประวัติการแลกไม่สำเร็จ";
+  } finally {
+    exchangeHistoryLoading.value = false;
   }
 }
 
@@ -1177,7 +1144,6 @@ async function enableMotion() {
     }
     window.addEventListener("devicemotion", onMotion, { passive: true });
     motionEnabled.value = true;
-    message.value = "เปิด Motion แล้ว";
   } catch {
     message.value =
       "อุปกรณ์นี้ไม่รองรับ Motion แตะที่ป้ายด้านล่างเพื่อกวนไข่แทนได้";
@@ -1194,8 +1160,8 @@ async function onShakeTap() {
 }
 
 function onMotion(e) {
-  // autoMoveClawTo (see autoGrabNext/autoStartFirstGrab) deliberately holds
-  // gameState at "playing" for however long the claw takes to slide toward
+  // autoMoveClawTo (see autoGrabNext) deliberately holds gameState at
+  // "playing" for however long the claw takes to slide toward
   // a target it already committed to — a real shake landing in that window
   // would restir eggs.value into a fresh set of objects/colors out from
   // under that already-picked target, so the claw ends up gripping (and
@@ -1214,10 +1180,22 @@ function onMotion(e) {
   }
 }
 
+// Shared across every beep instead of a fresh AudioContext per call — a
+// single grab fires 3 of these within under a second (pause/descend/grip),
+// and a full session dozens more, so a new-context-per-beep never got to
+// close any of them. Piling up that many live contexts is exactly the kind
+// of thing that makes a mobile webview (LINE's in-app browser included)
+// stutter or briefly blank the screen under the memory/audio-session churn.
+let sharedAudioCtx = null;
+
 function beep(freq = 320, duration = 0.05) {
   if (!soundOn.value) return;
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!sharedAudioCtx) {
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = sharedAudioCtx;
+    if (ctx.state === "suspended") ctx.resume();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.frequency.value = freq;
@@ -1294,7 +1272,6 @@ onBeforeUnmount(() => {
   <main class="app-shell">
     <section
       class="game-phone"
-      :class="{ flash: sceneFlash }"
       :style="{ backgroundImage: `url(${hexBg})` }"
     >
       <transition name="preloader-fade">
@@ -1368,6 +1345,15 @@ onBeforeUnmount(() => {
           <p v-if="message" class="message">{{ message }}</p>
         </section>
 
+        <section
+          v-else-if="gameState === 'exchange' && exchanging"
+          key="exchanging"
+          class="screen loading-reveal-screen"
+        >
+          <span class="preloader-spinner"></span>
+          <p class="preloader-label">กำลังโหลดหน้าคีบไข่...</p>
+        </section>
+
         <TicketExchange
           v-else-if="gameState === 'exchange'"
           key="exchange"
@@ -1376,7 +1362,6 @@ onBeforeUnmount(() => {
           :exchanging="exchanging"
           :message="message"
           @back="goHome"
-          @confirm="confirmExchange"
           @start="startFromExchange"
         />
 
@@ -1399,6 +1384,7 @@ onBeforeUnmount(() => {
           v-else-if="gameState === 'history'"
           key="history"
           :entries="historyLog"
+          :loading="historyLoading"
           @back="goHome"
         />
 
@@ -1406,6 +1392,7 @@ onBeforeUnmount(() => {
           v-else-if="gameState === 'exchangeHistory'"
           key="exchangeHistory"
           :entries="exchangeHistoryLog"
+          :loading="exchangeHistoryLoading"
           @back="goHome"
         />
 
@@ -1422,41 +1409,38 @@ onBeforeUnmount(() => {
           :message="message"
           :stir-trigger="stirTrigger"
           :tickets="tickets"
-          :batch-size="batchSize"
-          :max-batch="MAX_BATCH"
           :held-egg-color="heldEgg?.color || 'blue'"
           :needs-stir="needsStir"
-          :awaiting-result="awaitingResult"
+          :auto-active="autoRepeat"
+          :collected-eggs="collectedEggs"
           @back="goHome"
           @toggle-motion="enableMotion"
           @shake-tap="onShakeTap"
+          @toggle-auto="toggleAutoRepeat"
           @move-start="drive.press"
           @move-end="drive.release"
-          @grab="grabEgg(false)"
+          @grab="grabEgg"
           @stir="stirEggs"
-          @adjust-qty="adjustBatchQty"
         />
 
-        <EggOpening
-          v-else-if="gameState === 'opening'"
-          key="opening"
-          :crack-count="crackCount"
-          :frames="FRAMES"
-          :message="message"
-          :just-completed="justCompleted"
-          :egg-color="heldEgg?.color || 'blue'"
-          @tap="tapEgg"
-        />
+        <section
+          v-else-if="gameState === 'loadingReveal'"
+          key="loadingReveal"
+          class="screen loading-reveal-screen"
+        >
+          <span class="preloader-spinner"></span>
+          <p class="preloader-label">รอสักครู่ กำลังโหลดหน้าของรางวัล</p>
+        </section>
 
         <BatchSummary
           v-else-if="gameState === 'summary'"
           key="summary"
-          :rewards="batchRewards"
-          :tickets="tickets"
+          :eggs="collectedEggs"
           :confetti="confetti"
           :note="stockShortageNote"
-          @play-more="playMoreFromSummary"
           @go-home="goHome"
+          @open="celebrate"
+          @crack="onEggCrack"
         />
 
         <RewardResult
@@ -1464,33 +1448,20 @@ onBeforeUnmount(() => {
           key="result"
           :reward="reward"
           :reward-image="rewardImage"
-          :can-play="canPlayBatch"
           :confetti="confetti"
           :note="stockShortageNote"
-          :batch-progress="batchRevealProgress"
-          :auto-continuing="batchSize === 1 && autoRepeat"
-          @play-again="playAgain"
+          :egg-src="collectedEggs[0]?.src"
           @go-home="goHome"
+          @open="celebrate"
+          @crack="onEggCrack"
         />
       </transition>
 
-      <!-- Lives outside the screen transition on purpose: AUTO cycles
-           through playing/grabbing/opening/result/summary every round, and
-           GameMachine (which used to own this button) only renders during
-           a few of those — the button kept disappearing mid-cycle, making
-           it nearly impossible to reliably tap off. Anchored to
-           .game-phone instead so it stays put and clickable for the whole
-           cycle; hidden outside it so it doesn't clutter unrelated screens
-           (home, exchange, history, ...). -->
-      <button
-        v-if="['playing', 'stirring', 'grabbing', 'opening', 'result', 'summary'].includes(gameState)"
-        class="auto-toggle-fab"
-        :class="{ active: autoRepeat }"
-        @click="toggleAutoRepeat"
-      >
-        <span class="auto-toggle-fab-dot"></span>
-        AUTO
-      </button>
+      <OutOfTicketsPopup
+        v-if="outOfTicketsPopup"
+        :note="stockShortageNote"
+        @confirm="goToReveal"
+      />
     </section>
   </main>
 </template>
