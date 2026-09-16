@@ -143,6 +143,10 @@ function confirmRedeem() {
 .rewards-screen {
   align-items: stretch;
   justify-content: flex-start;
+  /* Reserves room for the fixed back-btn below so a long, scrolled catalog
+     never ends up hidden underneath it — same reasoning as HistoryList.vue's
+     own back-btn. */
+  padding-bottom: 100px;
 }
 .coin-inline {
   width: 15px;
@@ -266,10 +270,19 @@ function confirmRedeem() {
   font-size: clamp(13px, 4vw, 16px);
 }
 
+/* Fixed rather than a normal-flow "margin-top:auto" button — with a long
+   catalog the screen grows taller than the viewport and the page itself
+   scrolls, so a flow-positioned button ends up below the fold until the
+   player scrolls all the way down. Pinning it to the viewport bottom keeps
+   it reachable at all times, however long the list gets (same reasoning as
+   HistoryList.vue's own back-btn). */
 .back-btn {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
   width: min(300px, 80vw);
-  margin-top: auto;
-  align-self: center;
+  z-index: 5;
 }
 
 .modal-backdrop {

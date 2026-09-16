@@ -80,6 +80,7 @@ function pick(v) {
       เพื่อเล่นด้วยสิทธิที่มีอยู่ก่อน
     </p>
 
+    <div class="point-panel-wrap">
     <div class="point-panel">
       <img class="point-panel-bg" :src="panelBg" alt="" />
       <!-- Covers panel.png's own baked "Point คงเหลือ" label so the ticket
@@ -151,6 +152,7 @@ function pick(v) {
         />
       </button>
     </div>
+    </div>
     <p v-if="points < RATE" class="rule-note warn">
       Point ไม่พอสำหรับแลกสิทธิ์
     </p>
@@ -166,7 +168,7 @@ function pick(v) {
   justify-content: flex-start;
 }
 .point-title {
-  width: min(400px, 90vw);
+  width: min(400px, 90%);
   height: auto;
   margin: 2px 0 16px;
 }
@@ -195,19 +197,32 @@ function pick(v) {
    be, so there's more dead card space below it than before. Keep every
    child's percentage in that same ratio to each other if you resize this
    again. */
+/* .point-panel used to carry its own width + a negative bottom margin to
+   trim the panel art's dead space (see the child-percentage comment
+   above) — negative margins don't reliably shrink what a scrollable
+   *ancestor* (.screen's own overflow-y:auto) counts toward its own
+   scrollHeight in every browser, so .point-panel's full, un-trimmed
+   height (before the negative margin pulled .back-btn up over it) was
+   quietly still "there" for scroll purposes: .screen ended up
+   draggable-down into 80+px of nothing, on viewports tall enough that
+   nothing should have needed to scroll at all. This wrapper claims only
+   the actual trimmed footprint as real, positive height and clips the
+   panel's own dead space with overflow:hidden instead — a scrollable
+   ancestor can't be fooled by a box that was never really there.
+   % here (not vw) for the same reason as elsewhere on this screen — vw
+   measures the raw viewport, ignoring .screen's own 18px-a-side padding,
+   so it rendered a few px wider than the space actually available. */
+.point-panel-wrap {
+  --panel-w: min(400px, 94%);
+  width: var(--panel-w);
+  height: calc(var(--panel-w) * 980 / 569 - var(--panel-w) * 0.44);
+  overflow: hidden;
+  position: relative;
+}
 .point-panel {
   position: relative;
-  width: min(400px, 94vw);
+  width: 100%;
   aspect-ratio: 569 / 980;
-  /* The box's own aspect-ratio (and every child row's top-% inside it) is a
-     coupled system tuned around fixed-px button heights — shrinking the
-     ratio to remove the dead space below "เริ่มเกม" pulls every row's %
-     offset closer together in px terms while the buttons' own heights stay
-     fixed, which starts colliding rows well before the trailing space is
-     gone. Trimming the unused space with a negative margin instead leaves
-     every child's position untouched and only pulls whatever comes after
-     the panel (the back button) up to ignore it. */
-  margin-bottom: calc(-0.44 * min(400px, 94vw));
 }
 .point-panel-bg {
   position: absolute;
@@ -391,7 +406,7 @@ function pick(v) {
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
 }
 .exchange-message {
-  width: min(400px, 90vw);
+  width: min(400px, 90%);
   margin: 0 0 8px;
   color: #b9dcf6;
   text-align: center;
@@ -399,7 +414,7 @@ function pick(v) {
   line-height: 1.3;
 }
 .existing-ticket-note {
-  width: min(360px, 88vw);
+  width: min(360px, 88%);
   margin: 0 0 8px;
   padding: 6px 14px;
   border-radius: 10px;
@@ -413,7 +428,47 @@ function pick(v) {
 }
 
 .back-btn {
-  width: min(300px, 80vw);
-  margin-top: 40px;
+  width: min(300px, 80%);
+  margin-top: 12px;
+}
+
+/* @container, not @media — see the .game-phone comment in style.css: this
+   keys off the phone frame's own rendered width instead of the raw browser
+   viewport, which stays reliable in landscape or on a wide unfolded
+   foldable where the two would otherwise disagree. */
+@container (max-width: 399px) {
+  .point-title {
+    width: 95%;
+  }
+  .point-panel-bg {
+    height: 70.5%;
+  }
+  .panel-ticket-label {
+    height: 85%;
+  }
+  .panel-ticket-row {
+    top: 5.2%;
+  }
+  .stepper-btn-img {
+    top: 14.5%;
+  }
+  .panel-big-num {
+    top: 11.75%;
+  }
+  .panel-point-label {
+    top: 25%;
+  }
+  .ticket-chip {
+    top: 44.25%;
+  }
+  .start-game-btn {
+    top: 54%;
+  }
+  .quick-picks {
+    top: 34%;
+  }
+  .back-btn {
+    margin-top: -15px;
+  }
 }
 </style>

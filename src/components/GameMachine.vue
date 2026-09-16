@@ -152,14 +152,20 @@ watch(
       </p>
     </div>
 
-    <!-- Always present from the moment the round starts (not conditional
-         on collectedEggs actually having anything yet) — popping this whole
+    <!-- Present from the moment the round starts (not conditional on
+         collectedEggs actually having anything yet) — popping this whole
          box (dark background + border) into existence right as the first
          egg lands, shoving the ticket bar/controls down to make room, read
          as the screen itself hiccuping/going dark for a beat. Reserving its
          height up front means every later grab just adds an icon into an
-         already-stable layout instead. -->
-    <div class="collected-tray">
+         already-stable layout instead. The one exception is a single-ticket
+         session: tickets + collectedEggs.length is this session's whole
+         ticket count (invariant — grabEgg moves one from the former to the
+         latter every time), so <=1 means this tray can only ever hold at
+         most the one egg the round already ends on — not worth reserving
+         space for an empty box that'll never actually fill with more than
+         one icon before the round's over anyway. -->
+    <div v-if="tickets + collectedEggs.length > 1" class="collected-tray">
       <TransitionGroup name="egg-drop" tag="div" class="collected-tray-inner">
         <img
           v-for="egg in collectedEggs"
@@ -552,6 +558,39 @@ watch(
 @keyframes dangerPulse {
   to {
     transform: scale(1.08);
+  }
+}
+
+/* @container, not @media: keys off .game-phone's own rendered width (see
+   its container-type in style.css) instead of the raw browser viewport —
+   those two are the same number on a real phone in portrait, but not in
+   landscape or on a wide unfolded foldable, where @media silently stopped
+   matching even though the visible phone frame was still just as narrow. */
+@container (max-width: 600px) {
+  /* .cabinet/.collected-tray/.ticket-auto-bar/.control-dock all already
+     center themselves via their own margin:auto — shrinking their width
+     alone is enough. .shake-pill-bg is the one exception: it's a plain
+     block img with no auto margin of its own (its parent, .shake-pill,
+     stays full width so the shake-gate glow/tap target doesn't shrink with
+     it), so it needs its own centering here or it'd hug the left edge. */
+  .cabinet {
+    width: 95%;
+  }
+  .shake-pill-bg {
+    width: 95%;
+    margin: 0 auto;
+  }
+  .collected-tray {
+    width: 90%;
+  }
+  .ticket-auto-bar {
+    width: 90%;
+  }
+  .control-dock {
+    width: 95%;
+  }
+  .shake-pill {
+    margin: -28px auto 0;
   }
 }
 </style>

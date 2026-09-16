@@ -4,7 +4,7 @@
   background: #020813;
 }
 * { box-sizing: border-box; }
-html, body, #app { margin: 0; min-width: 320px; min-height: 100%; }
+html, body, #app { margin: 0; min-width: 300px; min-height: 100%; }
 button { font: inherit; -webkit-tap-highlight-color: transparent; }
 button:disabled { opacity: .45; }
 
@@ -23,6 +23,16 @@ button:disabled { opacity: .45; }
   height: 100dvh;
   position: relative;
   overflow: hidden;
+  /* Lets every screen's own @container (max-width: ...) rules react to how
+     wide this phone frame itself actually renders (capped at 560px above)
+     instead of the raw browser viewport. Those two are the same number on
+     a real phone in portrait — but not in landscape, or on a foldable's
+     wide unfolded screen, where the viewport can run well past 560px while
+     this frame still renders at its normal capped width. A plain @media
+     query keys off the viewport, so on exactly those devices it silently
+     stops matching and any "narrow screen" tweaks stop applying, even
+     though the visible phone frame is exactly as narrow as always. */
+  container-type: inline-size;
   background: #051033 linear-gradient(180deg, #08163f 0%, #030a1e 60%, #01040c 100%);
   /* hex-bg.png is a single hero shot (dark top fading into a glowing hex
      floor near the bottom), not a tileable texture — sizing it with
@@ -129,6 +139,20 @@ button:disabled { opacity: .45; }
   align-items:center;
   position:relative;
   overflow-y: auto;
+  /* Setting only overflow-y (above) makes the browser silently treat
+     overflow-x as auto too (an actual CSS rule: when only one axis is set
+     to something other than visible, the other one that's still visible
+     computes to auto instead) — several screens size an inner element off
+     vw (e.g. .point-panel's min(400px, 94vw)), which measures against the
+     *raw viewport*, not this element's own padded content box, so at
+     ordinary phone widths that inner element ends up a few px wider than
+     what's actually left after this element's own left/right padding.
+     .game-phone's overflow:hidden already clips the visual result either
+     way, but overflow-x:auto here still made *this* box internally
+     draggable left/right to "reveal" that clipped sliver — pinning it to
+     hidden turns that phantom scroll off outright, matching a fixed-width
+     mobile layout that was never meant to pan sideways at all. */
+  overflow-x: hidden;
 }
 
 /* Shared "scene" shell used by the mostly-static screens (limit-reached,
@@ -232,4 +256,60 @@ button:disabled { opacity: .45; }
 .screen-enter-active, .screen-leave-active { transition:opacity .24s ease, transform .24s ease; }
 .screen-enter-from { opacity:0; transform:translateY(10px) scale(.99); }
 .screen-leave-to { opacity:0; transform:translateY(-8px) scale(.99); }
+
+/* ============================================================
+   Width breakpoints — narrow-phone (<400px) vs everything else.
+   400px is the split because that's roughly where every screen's
+   own min(Xpx, Yvw) caps (e.g. .home-start-btn's min(360px, 88vw),
+   .point-panel's min(400px, 94vw)) stop being the binding constraint
+   and just settle at their flat Xpx ceiling — below it, the vw side
+   of that min() is what's actually driving the size down.
+
+   Put overrides for specific classes in here directly as a plain
+   @media query, same as below — not the container-type:size +
+   flex-grow shrinking combo TicketExchange.vue's .point-panel briefly
+   used to try to fit any screen automatically, which repeatedly
+   produced hard-to-predict results (an image's box ending up a
+   different aspect ratio than the image itself, or one element's
+   negative margin losing its overlap once its neighbor's size became
+   dynamic) and was undone. A plain breakpoint here is much easier to
+   reason about: pick a class, pick a value, see the exact same result
+   every time under 400px.
+
+   This is a different technique from GameMachine.vue/TicketExchange.vue/
+   HowToPlay.vue's own @container (max-width: ...) blocks in their
+   scoped styles, which stayed — those read .game-phone's own
+   container-type:inline-size above (a plain, already-definite width,
+   not one derived from container-query math), just so a real device's
+   landscape orientation or a foldable's wide unfolded screen — where
+   the raw viewport and this phone frame's own rendered width disagree
+   — doesn't stop them from matching. Nothing here needs that (nothing
+   below reacts differently on those devices), so plain @media stays
+   the simpler, safer default.
+
+   Example — to make the home screen's start button a bit smaller
+   specifically on narrow phones:
+     @media (max-width: 399px) {
+       .home-start-btn { width: min(300px, 84vw); }
+     }
+   ============================================================ */
+@media (max-width: 399px) {
+  .home-title { width: 85%; }
+  .home-cabinet { width: 80%; }
+  /* margin:0 auto — .img-btn itself is a plain block (no flex/text-align
+     centering of its own; at the original 100% width that never mattered
+     since there was never any leftover space to center within), so a
+     narrower image here would otherwise just sit flush against the
+     button's left edge instead of centering inside it. */
+  .img-btn img { width: 85%; margin: 0 auto; }
+  .home-nav-row { width: 90%; }
+}
+
+.gs-badge {
+  width: 27%;
+}
+
+@media (min-width: 400px) {
+  /* 400px-and-up overrides go here. */
+}
 
