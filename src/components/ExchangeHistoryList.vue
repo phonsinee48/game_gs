@@ -1,25 +1,26 @@
 <script setup>
 import { ref, watch, computed } from "vue";
-import coinIcon from "../assets/coin-icon.png";
-import title from "../assets/ui/exchange-history/title.png";
+import coinIcon from "../assets/coin-icon.webp";
+import title from "../assets/ui/exchange-history/title.webp";
 // Expanded header has an open bottom edge, meant to visually flow into the
 // panel below it (see .exchange-panel-bg) — same open-bottom/closed-pill
 // pairing HistoryList.vue uses for GS Game (73) vs date-header-collapsed-bg.
-import headerOpenBg from "../assets/ui/exchange-history/header-open-bg.png";
-import headerClosedBg from "../assets/ui/exchange-history/header-closed-bg.png";
-import rowBg from "../assets/ui/exchange-history/row-bg.png";
-import successBadge from "../assets/ui/exchange-history/success-badge.png";
+import headerOpenBg from "../assets/ui/exchange-history/header-open-bg.webp";
+import headerClosedBg from "../assets/ui/exchange-history/header-closed-bg.webp";
+import rowBg from "../assets/ui/exchange-history/row-bg.webp";
+import successBadge from "../assets/ui/exchange-history/success-badge.webp";
+import pendingBadge from "../assets/ui/exchange-history/pending-badge.webp";
 // Reused from play-history rather than re-exported here — same accordion
 // chevrons, home button, empty-state art, and 3-slice panel background
 // (top cap / stretchable middle / bottom cap) the other history screen uses.
-import chevronUp from "../assets/ui/play-history/GS Game (71).png";
-import chevronDown from "../assets/ui/play-history/GS Game (72).png";
-import btnHome from "../assets/ui/common/btn-home-blue.png";
-import emptyIcon from "../assets/ui/play-history/empty-icon.png";
-import emptyTitle from "../assets/ui/play-history/empty-title.png";
-import emptySubtitle from "../assets/ui/play-history/empty-subtitle.png";
-import panelCapTop from "../assets/ui/play-history/entries-panel-cap-top.png";
-import panelCapBottom from "../assets/ui/play-history/entries-panel-cap-bottom.png";
+import chevronUp from "../assets/ui/play-history/GS Game (71).webp";
+import chevronDown from "../assets/ui/play-history/GS Game (72).webp";
+import btnHome from "../assets/ui/common/btn-home-blue.webp";
+import emptyIcon from "../assets/ui/play-history/empty-icon.webp";
+import emptyTitle from "../assets/ui/play-history/empty-title.webp";
+import emptySubtitle from "../assets/ui/play-history/empty-subtitle.webp";
+import panelCapTop from "../assets/ui/play-history/entries-panel-cap-top.webp";
+import panelCapBottom from "../assets/ui/play-history/entries-panel-cap-bottom.webp";
 
 const props = defineProps({
   // Each entry: { id, ts, label, image, cost, claimStatus }. `image` and
@@ -27,13 +28,28 @@ const props = defineProps({
   // claim_status (0 = not yet fulfilled, 1 = done); `cost` is the Coin
   // amount that redemption spent.
   entries: { type: Array, required: true },
+  // True while App.vue's openExchangeHistory fetch is still in flight —
+  // same reasoning as HistoryList.vue's own loading prop: without this the
+  // empty-state art would flash "ยังไม่มีประวัติการแลก" for however long
+  // that request takes before real rows replace it.
+  loading: { type: Boolean, default: false },
 });
 
 defineEmits(["back"]);
 
 const THAI_MONTHS = [
-  "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
-  "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
 ];
 function formatThaiDate(ts) {
   const d = new Date(ts);
@@ -83,7 +99,11 @@ function toggle(date) {
   <section class="screen scene exchange-history-screen">
     <img class="scene-title" :src="title" alt="ประวัติการแลกรางวัล" />
 
-    <div v-if="!entries.length" class="empty-state">
+    <div v-if="loading" class="loading-state">
+      <span class="preloader-spinner"></span>
+    </div>
+
+    <div v-else-if="!entries.length" class="empty-state">
       <img class="empty-icon" :src="emptyIcon" alt="" />
       <img class="empty-title" :src="emptyTitle" alt="ยังไม่มีประวัติการแลก" />
       <img
@@ -134,16 +154,16 @@ function toggle(date) {
                   <span class="row-cost">
                     <span class="row-cost-prefix">ใช้</span>
                     <img class="coin-inline" :src="coinIcon" alt="" />
-                    <span class="row-cost-num">{{ e.cost.toLocaleString() }}</span>
+                    <span class="row-cost-num">{{
+                      e.cost.toLocaleString()
+                    }}</span>
                     <span class="row-cost-unit">Coin</span>
                   </span>
                   <img
-                    v-if="e.claimStatus === 1"
                     class="row-status-badge"
-                    :src="successBadge"
-                    alt="แลกสำเร็จ"
+                    :src="e.claimStatus === 1 ? successBadge : pendingBadge"
+                    :alt="e.claimStatus === 1 ? 'แลกสำเร็จ' : 'รอจัดส่ง'"
                   />
-                  <span v-else class="row-status-pending">รอดำเนินการ</span>
                 </div>
                 <p class="row-datetime">
                   {{ formatThaiDate(e.ts) }} {{ formatClock(e.ts) }}
@@ -170,7 +190,8 @@ function toggle(date) {
   padding-bottom: 100px;
 }
 
-.empty-state {
+.empty-state,
+.loading-state {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -179,9 +200,19 @@ function toggle(date) {
   gap: 6px;
   padding: 40px 0;
 }
-.empty-icon { width: min(220px, 56vw); height: auto; margin-bottom: 6px; }
-.empty-title { width: min(320px, 80vw); height: auto; }
-.empty-subtitle { width: min(300px, 76vw); height: auto; }
+.empty-icon {
+  width: min(220px, 56vw);
+  height: auto;
+  margin-bottom: 6px;
+}
+.empty-title {
+  width: min(320px, 80vw);
+  height: auto;
+}
+.empty-subtitle {
+  width: min(300px, 76vw);
+  height: auto;
+}
 
 .history-groups {
   list-style: none;
@@ -292,7 +323,7 @@ function toggle(date) {
 .panel-mid {
   flex: 1;
   min-height: 0;
-  background-image: url("../assets/ui/play-history/entries-panel-mid.png");
+  background-image: url("../assets/ui/play-history/entries-panel-mid.webp");
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
@@ -392,20 +423,27 @@ function toggle(date) {
   font-weight: 800;
   font-size: clamp(11px, 3.2vw, 13px);
 }
-.row-cost-prefix { color: #fff; }
-.coin-inline { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+.row-cost-prefix {
+  color: #fff;
+}
+.coin-inline {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
 .row-cost-num {
   font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
   color: #ffd739;
   font-size: 1.3em;
 }
-.row-cost-unit { color: #ffd739; }
-.row-status-badge { height: 22px; width: auto; flex-shrink: 0; }
-.row-status-pending {
-  color: #ffb020;
-  font-weight: 700;
-  font-size: clamp(10px, 3vw, 12px);
-  white-space: nowrap;
+.row-cost-unit {
+  color: #ffd739;
+}
+.row-status-badge {
+  height: 30px;
+  width: auto;
+  margin-top: -30px;
   flex-shrink: 0;
 }
 .row-datetime {
