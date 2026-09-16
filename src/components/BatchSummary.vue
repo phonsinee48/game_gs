@@ -1,30 +1,74 @@
 <script setup>
-import { computed } from "vue";
-import coinIcon from "../assets/coin-icon.png";
-import title from "../assets/ui/receive-prize/title.png";
-import totalsBg from "../assets/ui/receive-prize/GS Game (60).png";
-import detailHeaderBg from "../assets/ui/receive-prize/GS Game (62).png";
-import detailPanelBg from "../assets/ui/receive-prize/GS Game (63).png";
-import rowBg from "../assets/ui/receive-prize/GS Game (61).png";
-import btnClaim from "../assets/ui/receive-prize/btn-claim.png";
-import btnAgain from "../assets/ui/receive-prize/btn-again.png";
+import { computed, ref } from "vue";
+import coinIcon from "../assets/coin-icon.webp";
+import coinWord from "../assets/ui/receive-prize/coin-word.webp";
+import title from "../assets/ui/receive-prize/title.webp";
+import coinStack from "../assets/ui/receive-prize/coin-stack.webp";
+import btnHome from "../assets/ui/common/btn-home-blue.webp";
+import titleAndSubtitle from "../assets/ui/egg-open/title-and-subtitle.webp";
+import btnOpenAll from "../assets/ui/egg-open/btn-open-all.webp";
+import cardFrame from "../assets/ui/egg-open/card-frame.webp";
+import scrollHint from "../assets/ui/egg-open/scroll-hint.webp";
+import totalEggsPill from "../assets/ui/egg-open/total-eggs-pill.webp";
+import labelEggIndex from "../assets/ui/egg-open/label-egg-index.webp";
+import CrackableEgg from "./CrackableEgg.vue";
 
 const props = defineProps({
-  rewards: { type: Array, required: true },
-  tickets: { type: Number, required: true },
+  // Every egg grabbed this session, each { id, color, src, reward } — reward
+  // is already decided (see App.vue's grabEgg) but stays hidden in the UI
+  // until its card is opened, individually (same crack-open interaction as
+  // the lone-egg screen, see CrackableEgg) or via "เปิดทั้งหมด".
+  eggs: { type: Array, required: true },
   confetti: { type: Boolean, default: false },
-  // Set when play_claw stopped short of the full batch because a reward
-  // ran out of stock mid-draw — explains why fewer prizes came back than
-  // tickets spent.
+  // Set when play_claw stopped short of the full session because a reward
+  // ran out of stock mid-draw — explains why one grab yielded nothing.
   note: { type: String, default: "" },
 });
 
-defineEmits(["play-more", "go-home"]);
+const emit = defineEmits(["go-home", "open", "crack"]);
 
-const coinTotal = computed(() =>
-  props.rewards
-    .filter((r) => r.type === "coin")
-    .reduce((s, r) => s + r.value, 0),
+// A plain Set (not a boolean per egg) so isOpened stays a simple lookup —
+// each id only ever gets added, via onCardOpen below, once that egg's own
+// CrackableEgg instance has actually finished cracking (whether from a real
+// tap or from openAll's simulated one).
+const openedIds = ref(new Set());
+// CrackableEgg instances currently on screen, keyed by egg id — openAll
+// needs these to trigger each one's own autoOpen() (see CrackableEgg).
+// Vue drops an id's entry here on its own once that card unmounts (see the
+// template's function-ref binding), so this never holds onto stale refs
+// for eggs that already got revealed.
+const crackableRefs = ref({});
+
+function isOpened(id) {
+  return openedIds.value.has(id);
+}
+function setCrackableRef(id, el) {
+  if (el) crackableRefs.value[id] = el;
+  else delete crackableRefs.value[id];
+}
+function onCardOpen(id) {
+  if (openedIds.value.has(id)) return;
+  const next = new Set(openedIds.value);
+  next.add(id);
+  openedIds.value = next;
+  emit("open");
+}
+// Still plays every still-closed egg's own crack animation (see
+// CrackableEgg's autoOpen) rather than just snapping straight to opened —
+// staggered a beat apart so they crack in a cascading ripple down the list
+// instead of all flashing at once.
+const AUTO_OPEN_STAGGER_MS = 150;
+function openAll() {
+  const unopened = props.eggs.filter((e) => !openedIds.value.has(e.id));
+  unopened.forEach((egg, i) => {
+    setTimeout(() => {
+      crackableRefs.value[egg.id]?.autoOpen();
+    }, i * AUTO_OPEN_STAGGER_MS);
+  });
+}
+
+const allOpened = computed(
+  () => props.eggs.length > 0 && openedIds.value.size >= props.eggs.length,
 );
 </script>
 
@@ -42,57 +86,112 @@ const coinTotal = computed(() =>
       ></i>
     </div>
 
+    <template v-if="!allOpened">
+      <img
+        class="crack-heading"
+        :src="titleAndSubtitle"
+        alt="คุณได้ไข่แล้ว! แตะเพื่อเปิดไข่"
+      />
+      <div class="total-eggs-pill">
+        <img class="total-eggs-pill-bg" :src="totalEggsPill" alt="" />
+        <span class="total-eggs-num">{{ eggs.length }}</span>
+      </div>
+      <button class="img-btn open-all-btn" @click="openAll">
+        <img :src="btnOpenAll" alt="เปิดทั้งหมด" />
+      </button>
+    </template>
     <img
+      v-else
       class="scene-title"
       :src="title"
       alt="ยินดีด้วย! คุณได้รับรางวัลจาก GS CLAW EGG"
     />
 
-    <div class="totals-panel">
-      <img class="totals-bg" :src="totalsBg" alt="ผลการคีบทั้งหมด" />
-      <span class="totals-times-num">{{ rewards.length }}</span>
-      <div class="totals-coin-row">
-        <img class="totals-coin-icon" :src="coinIcon" alt="" />
-        <span class="totals-coin-num">{{ coinTotal.toLocaleString() }}</span>
-      </div>
-    </div>
+    <ul class="egg-list">
+      <li v-for="(egg, idx) in eggs" :key="egg.id" class="egg-list-item">
+        <div class="egg-card">
+          <img class="card-frame-bg" :src="cardFrame" alt="" />
 
-    <img class="detail-header" :src="detailHeaderBg" alt="รายละเอียดรางวัล" />
-
-    <div class="detail-panel">
-      <img class="detail-panel-bg" :src="detailPanelBg" alt="" />
-      <ul class="reward-rows">
-        <li v-for="(r, i) in rewards" :key="i" class="reward-row">
-          <img class="row-bg" :src="rowBg" alt="" />
-          <span class="row-index">{{ i + 1 }}</span>
-          <span class="row-content">
-            <img
-              v-if="r.type === 'coin'"
-              class="row-coin-icon"
-              :src="coinIcon"
-              alt=""
+          <div v-if="!isOpened(egg.id)" class="card-egg-wrap">
+            <CrackableEgg
+              :ref="(el) => setCrackableRef(egg.id, el)"
+              :egg-src="egg.src"
+              @crack="$emit('crack', $event)"
+              @open="onCardOpen(egg.id)"
             />
-            <span class="row-value">{{
-              r.type === "coin" ? r.value : r.label
-            }}</span>
-            <span v-if="r.type === 'coin'" class="row-unit">Coin</span>
-          </span>
-        </li>
-      </ul>
-    </div>
+          </div>
+          <!-- Cracked, but the session's one batch call (see App.vue's
+               resolveSessionBatch) hasn't resolved yet — only really shows
+               for whichever card the player happens to crack first, since
+               that network wait usually finishes before they get to the
+               rest. -->
+          <div v-else-if="!egg.reward" class="card-loading">
+            <span class="preloader-spinner"></span>
+          </div>
+          <!-- coinStack is a coin-pile pedestal, so it's only ever shown
+               behind an actual coin win; a prize gets its own backend
+               photo standing alone instead — the two are never layered
+               together. -->
+          <template v-else>
+            <div class="card-hero">
+              <img
+                v-if="egg.reward.type === 'coin'"
+                class="card-hero-bg"
+                :src="coinStack"
+                alt=""
+              />
+              <img
+                v-if="egg.reward.type === 'coin'"
+                class="card-hero-coin"
+                :src="coinIcon"
+                alt=""
+              />
+              <img
+                v-else
+                class="card-hero-prize-standalone"
+                :src="egg.reward.image"
+                :alt="egg.reward.label"
+              />
+            </div>
+            <span
+              class="card-value"
+              :class="
+                egg.reward.type === 'coin'
+                  ? 'card-value-coin'
+                  : 'card-value-prize'
+              "
+              >{{
+                egg.reward.type === "coin" ? egg.reward.value : egg.reward.label
+              }}</span
+            >
+            <img
+              v-if="egg.reward.type === 'coin'"
+              class="card-unit"
+              :src="coinWord"
+              alt="Coin"
+            />
+          </template>
+
+          <div class="card-label-pill">
+            <img class="card-label-pill-bg" :src="labelEggIndex" alt="" />
+            <span class="card-label-pill-num">{{ idx + 1 }}</span>
+          </div>
+        </div>
+
+        <img
+          v-if="idx < eggs.length - 1"
+          class="scroll-hint"
+          :src="scrollHint"
+          alt="เลื่อนลงเพื่อดูไข่ใบถัดไป"
+        />
+      </li>
+    </ul>
 
     <p v-if="note" class="stock-note">{{ note }}</p>
 
     <div class="summary-actions">
-      <button class="img-btn" @click="$emit('go-home')">
-        <img :src="btnClaim" alt="รับรางวัล" />
-      </button>
-      <button
-        class="img-btn"
-        :disabled="tickets < 1"
-        @click="$emit('play-more')"
-      >
-        <img :src="btnAgain" alt="เล่นอีกครั้ง" />
+      <button class="img-btn" :disabled="!allOpened" @click="$emit('go-home')">
+        <img :src="btnHome" alt="กลับหน้าหลัก" />
       </button>
     </div>
   </section>
@@ -103,29 +202,230 @@ const coinTotal = computed(() =>
   text-align: center;
 }
 
-/* Percentages measured against the 930x476 totals-panel background
-   (GS Game (60).png) — its title, "คุณได้ใช้สิทธิ์คีบทั้งหมด ... ครั้ง" and
-   "รวมทั้งหมด" / "Coin" copy are baked in; only the tap-count and the coin
-   total are live overlays. */
-.totals-panel {
-  position: relative;
-  width: 100%;
-  max-width: 380px;
-  margin: 0 0 14px;
-  aspect-ratio: 930 / 476;
+.crack-heading {
+  width: min(340px, 82vw);
+  height: auto;
+  margin: 0 0 8px;
 }
-.totals-bg {
+
+/* Percentages measured against the 1241x227 pill art — "ไข่ทั้งหมด" and
+   "ฟอง" are baked in on either side of a gap left for the live count. */
+.total-eggs-pill {
+  position: relative;
+  width: min(280px, 72vw);
+  aspect-ratio: 1241 / 227;
+  margin: 0 0 10px;
+}
+.total-eggs-pill-bg {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
 }
-.totals-times-num {
+.total-eggs-num {
   position: absolute;
-  left: 58%;
-  width: 8%;
-  top: 23%;
-  height: 13%;
+  left: 53%;
+  width: 14%;
+  top: 18%;
+  height: 64%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-weight: 800;
+  color: #ffd739;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  font-size: clamp(16px, 5vw, 22px);
+  font-variant-numeric: tabular-nums;
+}
+
+.open-all-btn {
+  width: min(190px, 56vw);
+  margin: 0 0 14px;
+  touch-action: manipulation;
+}
+
+.egg-list {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 4px 10px 4px 2px;
+  max-height: 58vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+/* A thin neon scrollbar instead of the browser default — the list is
+   deliberately tall enough to need scrolling for anything past a couple of
+   eggs (see .egg-list's max-height), so this is the main hint that there's
+   more below besides the per-card scroll-hint graphic. Webkit-only, but
+   that covers every real target here (LINE's in-app browser, Chrome,
+   Safari); other browsers just keep their native scrollbar. */
+.egg-list::-webkit-scrollbar {
+  width: 5px;
+}
+.egg-list::-webkit-scrollbar-track {
+  background: rgba(101, 197, 255, 0.15);
+  border-radius: 999px;
+}
+.egg-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7fe0ff, #1f9bff);
+  border-radius: 999px;
+}
+
+.egg-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Percentages below are measured against the 318x380 frame art — its own
+   glow border + hex floor + reflection ring are baked in, so the egg/
+   reward content just has to sit inside the area they already leave clear. */
+.egg-card {
+  position: relative;
+  width: min(230px, 60vw);
+  aspect-ratio: 318 / 380;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.card-frame-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  z-index: 0;
+}
+.card-egg-wrap {
+  position: relative;
+  z-index: 1;
+  width: 62%;
+  margin-top: 14%;
+}
+.card-loading {
+  position: relative;
+  z-index: 1;
+  margin-top: 32%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card-loading .preloader-spinner {
+  width: 36px;
+  height: 36px;
+}
+.card-hero {
+  position: relative;
+  z-index: 1;
+  width: 58%;
+  aspect-ratio: 1;
+  margin-top: 12%;
+  display: grid;
+  place-items: center;
+  animation: heroPop 0.5s cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
+}
+.card-hero-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.card-hero-coin {
+  position: absolute;
+  width: 34%;
+  height: 34%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+}
+.card-hero-prize-standalone {
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.35));
+}
+@keyframes heroPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.62) rotate(-4deg);
+  }
+  70% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.card-value {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-weight: 800;
+  max-width: 78%;
+  text-align: center;
+  line-height: 1.25;
+  margin-top: -4px;
+  /* A prize's name (unlike a coin amount) has no fixed length — long ones
+     (e.g. "บัตรกำนัล ปตท. 1,000 บาท") wrap onto a second line instead of
+     being cut off with "...", matching how the lone-egg screen's own
+     .prize-label already handles the same text. */
+  overflow-wrap: break-word;
+  font-variant-numeric: tabular-nums;
+}
+/* Only the coin amount (never a prize name — those stay in .card-value-prize
+   below) gets the same numeral font as the HUD's own Point/Coin counters
+   and the lone-egg screen's .amount-num, for a consistent look. A coin
+   amount is always short (a plain number), so it can afford to run much
+   bigger than a prize name without risking overflow/wrap. */
+.card-value-coin {
+  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 30px;
+  color: #ffd739;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+/* A prize's name can run long ("บัตรกำนัล ปตท. มูลค่า 500 บาท") and wraps
+   onto multiple lines inside the same card — kept well below the coin
+   amount's size so it fits without dominating the card. */
+.card-value-prize {
+  font-size: 18px;
+}
+/* Real artwork, not text — matches the lone-egg screen's own
+   .amount-coin-word (coin-word.png) instead of rendering "Coin" in a system
+   font, which is what looked off here. */
+.card-unit {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  aspect-ratio: 425 / 220;
+  height: auto;
+  object-fit: contain;
+}
+.card-label-pill {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  margin-bottom: 8%;
+  width: min(160px, 42vw);
+}
+.card-label-pill-bg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+/* Percentages measured against the 461x120 label-egg-index.webp — "ไข่ใบที่"
+   is baked in on the left, leaving the pill's own right-hand curve/padding
+   free for the live index number. */
+.card-label-pill-num {
+  position: absolute;
+  left: 60%;
+  width: 20%;
+  top: 15%;
+  height: 76%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -136,129 +436,11 @@ const coinTotal = computed(() =>
   font-size: 20px;
   font-variant-numeric: tabular-nums;
 }
-.totals-coin-row {
-  position: absolute;
-  left: 38%;
-  width: 47%;
-  top: 56%;
-  height: 27%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-.totals-coin-icon {
-  width: 27%;
+
+.scroll-hint {
+  width: min(220px, 58vw);
   height: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
-}
-.totals-coin-num {
-  font-family: "Baloo 2", Inter, ui-sans-serif, system-ui, sans-serif;
-  font-weight: 800;
-  color: #ffd739;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-  font-size: 40px;
-  font-variant-numeric: tabular-nums;
-}
-
-.detail-header {
-  width: min(280px, 72vw);
-  height: auto;
-  margin: 0px 0 -27px;
-  position: relative;
-  z-index: 1;
-}
-
-/* Container height is driven by however many rows there are (capped by
-   .reward-rows' own max-height + scroll) — the frame art stretches to
-   match via object-fit:fill, same trick CoinRewards uses for its rows. */
-.detail-panel {
-  position: relative;
-  width: 100%;
-  max-width: 380px;
-  padding: 30px 7% 22px;
-  margin-bottom: 16px;
-}
-.detail-panel-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  z-index: 0;
-}
-
-.reward-rows {
-  position: relative;
-  z-index: 1;
-  list-style: none;
-  margin: 0;
-  padding: 2px 4px 2px 0;
-  max-height: 230px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.reward-row {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1489 / 190;
-}
-.row-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  display: block;
-}
-.row-index {
-  position: absolute;
-  left: 1.5%;
-  width: 13%;
-  top: 2%;
-  height: 92%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #7fd0ff;
-  font-weight: 800;
-  font-size: clamp(12px, 3.6vw, 16px);
-}
-.row-content {
-  position: absolute;
-  left: 16%;
-  width: 78%;
-  top: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  overflow: hidden;
-}
-.row-coin-icon {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-.row-value {
-  color: #fff;
-  font-weight: 800;
-  font-size: clamp(13px, 3.8vw, 17px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.row-unit {
-  color: #ffb84d;
-  font-weight: 700;
-  font-size: clamp(11px, 3.2vw, 14px);
-  flex-shrink: 0;
+  margin: 4px 0 2px;
 }
 
 .stock-note {
@@ -274,7 +456,7 @@ const coinTotal = computed(() =>
 }
 
 .summary-actions {
-  width: min(380px, 92vw);
+  width: min(280px, 80vw);
   display: flex;
   flex-direction: row;
   justify-content: center;
