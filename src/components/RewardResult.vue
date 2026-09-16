@@ -1,36 +1,42 @@
 <script setup>
-import title from "../assets/ui/receive-prize/title.png";
-import coinStack from "../assets/ui/receive-prize/coin-stack.png";
-import labelYouGot from "../assets/ui/receive-prize/label-you-got.png";
-import coinWord from "../assets/ui/receive-prize/coin-word.png";
-import coinIcon from "../assets/coin-icon.png";
-import btnClaim from "../assets/ui/receive-prize/btn-claim.png";
-import btnAgain from "../assets/ui/receive-prize/btn-again.png";
-import noteCoin from "../assets/ui/receive-prize/note-coin.png";
+import { ref } from "vue";
+import title from "../assets/ui/receive-prize/title.webp";
+import coinStack from "../assets/ui/receive-prize/coin-stack.webp";
+import labelYouGot from "../assets/ui/receive-prize/label-you-got.webp";
+import coinWord from "../assets/ui/receive-prize/coin-word.webp";
+import coinIcon from "../assets/coin-icon.webp";
+import btnHome from "../assets/ui/common/btn-home-blue.webp";
+import noteCoin from "../assets/ui/receive-prize/note-coin.webp";
+import crackTitle from "../assets/ui/egg-open/title.webp";
+import crackSubtitle from "../assets/ui/egg-open/subtitle.webp";
+import CrackableEgg from "./CrackableEgg.vue";
 
-defineProps({
+const props = defineProps({
   reward: { type: Object, default: null },
   rewardImage: { type: String, required: true },
-  canPlay: { type: Boolean, default: false },
   confetti: { type: Boolean, default: false },
-  // Set when play_claw stopped short of the full batch because a reward
-  // ran out of stock mid-draw — explains why fewer prizes came back than
-  // tickets spent.
+  // Set when play_claw stopped short of a grab because a reward ran out of
+  // stock mid-draw — explains why that grab yielded nothing.
   note: { type: String, default: "" },
-  // Set (to e.g. { current: 3, total: 10 }) while this reveal is one egg
-  // in the middle of an auto-played batch (see advanceBatch in App.vue) —
-  // swaps the play-again/go-home actions for a short "egg x/y" caption,
-  // since the app itself moves on to the next egg (or the summary, once
-  // this was the last one) a moment later without any tap needed.
-  batchProgress: { type: Object, default: null },
-  // True when this single-ticket reveal is about to auto-start the next
-  // round on its own (the AUTO toggle, see toggleAutoRepeat in App.vue) —
-  // same idea as batchProgress, just for a batch size of 1 where there's
-  // no "egg x/y" count to show.
-  autoContinuing: { type: Boolean, default: false },
+  // The color-matched egg image to crack open before the reward shows (see
+  // CrackableEgg) — same interaction BatchSummary's list uses per row, just
+  // for the lone-egg case. Reveals immediately (no cracking) for older
+  // resumed sessions where the original color isn't known (see App.vue's
+  // resumePendingBatch).
+  eggSrc: { type: String, default: null },
 });
 
-defineEmits(["play-again", "go-home"]);
+const emit = defineEmits(["go-home", "open", "crack"]);
+
+// RewardResult only ever mounts fresh per session (its gameState branch is
+// unmounted and remounted between rounds, never reused in place), so a
+// plain setup-time default is enough — no watch needed to reset it later.
+const opened = ref(!props.eggSrc);
+
+function onOpen() {
+  opened.value = true;
+  emit("open");
+}
 </script>
 
 <template>
@@ -47,60 +53,83 @@ defineEmits(["play-again", "go-home"]);
       ></i>
     </div>
 
-    <img
-      class="scene-title"
-      :src="title"
-      alt="ยินดีด้วย! คุณได้รับรางวัลจาก GS CLAW EGG"
-    />
+    <template v-if="!opened">
+      <img class="scene-title" :src="crackTitle" alt="คุณได้ไข่แล้ว!" />
+      <img class="crack-subtitle" :src="crackSubtitle" alt="แตะเพื่อเปิดไข่" />
 
-    <div class="reward-hero">
-      <img class="hero-bg" :src="coinStack" alt="" />
-      <img
-        v-if="reward?.type !== 'coin'"
-        class="hero-prize"
-        :src="rewardImage"
-        :alt="reward?.label"
-      />
-    </div>
-
-    <div v-if="reward?.type === 'coin'" class="amount-wrap">
-      <img class="label-you-got" :src="labelYouGot" alt="คุณได้รับ" />
-      <div class="amount-row">
-        <img class="amount-coin-icon" :src="coinIcon" alt="" />
-        <span class="amount-num">{{ reward?.value }}</span>
-        <img class="amount-coin-word" :src="coinWord" alt="Coin" />
+      <div class="egg-wrap">
+        <CrackableEgg
+          :egg-src="eggSrc"
+          @crack="$emit('crack', $event)"
+          @open="onOpen"
+        />
       </div>
-    </div>
-    <h1 v-else class="prize-label">{{ reward?.label }}</h1>
+    </template>
 
-    <p v-if="note" class="stock-note">{{ note }}</p>
+    <template v-else-if="!reward">
+      <img
+        class="scene-title"
+        :src="title"
+        alt="ยินดีด้วย! คุณได้รับรางวัลจาก GS CLAW EGG"
+      />
+      <!-- The crack animation finished but the session's one batch call
+           (see App.vue's resolveSessionBatch) hasn't come back yet — can
+           happen if the network is unusually slow, since even a 2-tap
+           crack usually outlasts that wait. Nothing to reveal until it
+           resolves. -->
+      <div class="reveal-loading">
+        <span class="preloader-spinner"></span>
+        <p class="reveal-loading-label">กำลังเปิดไข่...</p>
+      </div>
+    </template>
 
-    <p v-if="batchProgress" class="batch-progress">
-      ฟองที่ {{ batchProgress.current }}/{{ batchProgress.total }}
-    </p>
-    <p v-else-if="autoContinuing" class="batch-progress">
-      กำลังเล่นต่ออัตโนมัติ...
-    </p>
-    <div v-else class="result-actions">
-      <button class="img-btn" @click="$emit('go-home')">
-        <img :src="btnClaim" alt="รับรางวัล" />
-      </button>
-      <button
-        class="img-btn"
-        :disabled="!canPlay"
-        @click="$emit('play-again')"
-      >
-        <img :src="btnAgain" alt="เล่นอีกครั้ง" />
-      </button>
-    </div>
+    <template v-else>
+      <img
+        class="scene-title"
+        :src="title"
+        alt="ยินดีด้วย! คุณได้รับรางวัลจาก GS CLAW EGG"
+      />
 
-    <img
-      v-if="reward?.type === 'coin'"
-      class="scene-note reward-note-img"
-      :src="noteCoin"
-      alt="Coin จะถูกเพิ่มเข้าบัญชีของคุณทันที"
-    />
-    <p v-else class="reward-note">ของรางวัลจะถูกบันทึกในประวัติรางวัล</p>
+      <div class="reward-hero">
+        <!-- coinStack is a coin-pile pedestal — showing it behind an actual
+             prize photo reads as "coins + prize" overlapping, not just one
+             reward. Only ever shown for an actual coin win; a prize gets
+             its own backend photo standing alone instead. -->
+        <img v-if="reward?.type === 'coin'" class="hero-bg" :src="coinStack" alt="" />
+        <img
+          v-else
+          class="hero-prize-standalone"
+          :src="rewardImage"
+          :alt="reward?.label"
+        />
+      </div>
+
+      <div v-if="reward?.type === 'coin'" class="amount-wrap">
+        <img class="label-you-got" :src="labelYouGot" alt="คุณได้รับ" />
+        <div class="amount-row">
+          <img class="amount-coin-icon" :src="coinIcon" alt="" />
+          <span class="amount-num">{{ reward?.value }}</span>
+          <img class="amount-coin-word" :src="coinWord" alt="Coin" />
+        </div>
+      </div>
+      <h1 v-else class="prize-label">{{ reward?.label }}</h1>
+
+      <p v-if="note" class="stock-note">{{ note }}</p>
+
+      <div class="result-actions">
+        <button class="img-btn" @click="$emit('go-home')">
+          <img :src="btnHome" alt="กลับหน้าหลัก" />
+        </button>
+      </div>
+
+      <img
+        v-if="reward?.type === 'coin'"
+        class="scene-note reward-note-img"
+        :src="noteCoin"
+        alt="Coin จะถูกเพิ่มเข้าบัญชีของคุณทันที"
+      />
+      <p v-else class="reward-note">ของรางวัลจะถูกบันทึกในประวัติรางวัล</p>
+    </template>
   </section>
 </template>
 
@@ -109,6 +138,31 @@ defineEmits(["play-again", "go-home"]);
   justify-content: flex-start;
   text-align: center;
   overflow: hidden;
+}
+
+.crack-subtitle {
+  width: min(260px, 66vw);
+  height: auto;
+  margin: 0 0 20px;
+}
+
+.egg-wrap {
+  width: min(240px, 62vw);
+}
+
+.reveal-loading {
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.reveal-loading-label {
+  margin: 0;
+  color: #9fd3ff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 .reward-hero {
@@ -125,12 +179,11 @@ defineEmits(["play-again", "go-home"]);
   height: 100%;
   object-fit: contain;
 }
-.hero-prize {
-  position: absolute;
-  width: 46%;
-  height: 46%;
+.hero-prize-standalone {
+  width: 84%;
+  height: 84%;
   object-fit: contain;
-  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.4));
 }
 
 .amount-wrap {
@@ -198,24 +251,16 @@ defineEmits(["play-again", "go-home"]);
   font-size: 11.5px;
   line-height: 1.4;
 }
-.batch-progress {
-  margin: 4px 0 0;
-  color: #9fd8ff;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
 .reward-note-img {
   width: min(375px, 100vw);
   margin: 15px 0 0;
 }
 
 .result-actions {
-  width: min(380px, 92vw);
+  width: min(280px, 80vw);
   display: flex;
   flex-direction: row;
   justify-content: center;
-  gap: 12px;
 }
 .result-actions .img-btn {
   flex: 1;
