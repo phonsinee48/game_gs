@@ -1,26 +1,32 @@
 <script setup>
 import { ref, watch, computed } from "vue";
-import coinIcon from "../assets/coin-icon.png";
-import title from "../assets/ui/play-history/title.png";
-import btnHome from "../assets/ui/common/btn-home-blue.png";
-import emptyIcon from "../assets/ui/play-history/empty-icon.png";
-import emptySubtitle from "../assets/ui/play-history/empty-subtitle.png";
-import emptyTitle from "../assets/ui/play-history/empty-title.png";
-import rowBg from "../assets/ui/play-history/GS Game (70).png";
-import clockIcon from "../assets/ui/play-history/history-clock-icon.png";
-import chevronUp from "../assets/ui/play-history/GS Game (71).png";
-import chevronDown from "../assets/ui/play-history/GS Game (72).png";
+import coinIcon from "../assets/coin-icon.webp";
+import title from "../assets/ui/play-history/title.webp";
+import btnHome from "../assets/ui/common/btn-home-blue.webp";
+import emptyIcon from "../assets/ui/play-history/empty-icon.webp";
+import emptySubtitle from "../assets/ui/play-history/empty-subtitle.webp";
+import emptyTitle from "../assets/ui/play-history/empty-title.webp";
+import rowBg from "../assets/ui/play-history/GS Game (70).webp";
+import clockIcon from "../assets/ui/play-history/history-clock-icon.webp";
+import chevronUp from "../assets/ui/play-history/GS Game (71).webp";
+import chevronDown from "../assets/ui/play-history/GS Game (72).webp";
 // Sliced from entries-panel-full.png into a top cap (has the first diamond
 // stud), a plain stretchable middle band, and a bottom cap (second stud +
 // the notched border corners) — see the .entries-panel-bg comment below for
 // why. The middle band is referenced directly from CSS (see .entries-mid)
 // rather than imported here, since it's a plain background-image, not an
 // <img>.
-import entriesCapTop from "../assets/ui/play-history/entries-panel-cap-top.png";
-import entriesCapBottom from "../assets/ui/play-history/entries-panel-cap-bottom.png";
+import entriesCapTop from "../assets/ui/play-history/entries-panel-cap-top.webp";
+import entriesCapBottom from "../assets/ui/play-history/entries-panel-cap-bottom.webp";
 
 const props = defineProps({
   entries: { type: Array, required: true },
+  // True while App.vue's openHistory fetch is still in flight — shown as a
+  // spinner instead of falling through to the empty-state art, which would
+  // otherwise flash "ยังไม่มีประวัติการเล่น" for however long that request
+  // takes (entries is still whatever it was before this fetch, often
+  // nothing) and read as "you have no history" before real rows arrive.
+  loading: { type: Boolean, default: false },
 });
 
 defineEmits(["back"]);
@@ -79,7 +85,11 @@ function toggle(date) {
   <section class="screen scene history-screen">
     <img class="scene-title" :src="title" alt="ประวัติการเล่น GS CLAW EGG" />
 
-    <div v-if="!entries.length" class="empty-state">
+    <div v-if="loading" class="loading-state">
+      <span class="preloader-spinner"></span>
+    </div>
+
+    <div v-else-if="!entries.length" class="empty-state">
       <img class="empty-icon" :src="emptyIcon" alt="" />
       <img class="empty-title" :src="emptyTitle" alt="ยังไม่มีประวัติการเล่น" />
       <img
@@ -173,7 +183,8 @@ function toggle(date) {
   padding-bottom: 100px;
 }
 
-.empty-state {
+.empty-state,
+.loading-state {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -228,7 +239,7 @@ function toggle(date) {
   background-color: transparent;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  background-image: url("../assets/ui/play-history/GS Game (73).png");
+  background-image: url("../assets/ui/play-history/GS Game (73).webp");
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
@@ -240,7 +251,7 @@ function toggle(date) {
    reads as cut off. */
 .history-date-header.is-collapsed {
   aspect-ratio: 1202 / 198;
-  background-image: url("../assets/ui/play-history/date-header-collapsed-bg.png");
+  background-image: url("../assets/ui/play-history/date-header-collapsed-bg.webp");
 }
 .header-date {
   position: absolute;
@@ -322,7 +333,7 @@ function toggle(date) {
 .entries-mid {
   flex: 1;
   min-height: 0;
-  background-image: url("../assets/ui/play-history/entries-panel-mid.png");
+  background-image: url("../assets/ui/play-history/entries-panel-mid.webp");
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
